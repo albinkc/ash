@@ -1,4 +1,5 @@
 name: Ash CI
+
 on:
   push:
     tags:
@@ -10,14 +11,20 @@ on:
 
 jobs:
   ash-ci:
+    # Run this job only when the workflow is executed in the upstream repo
+    if: github.repository == 'ash-project/ash'
+
     strategy:
       matrix:
         sat_solver: ["SimpleSat", "Picosat"]
+
     uses: ash-project/ash/.github/workflows/ash-ci.yml@main
+
     secrets:
       HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+
     with:
       sat-solver: ${{ matrix.sat_solver }}
-      igniter-upgrade: ${{matrix.sat_solver == 'Picosat'}}
-      publish-docs: ${{matrix.sat_solver == 'Picosat'}}
-      release: ${{matrix.sat_solver == 'Picosat'}}
+      igniter-upgrade: ${{ matrix.sat_solver == 'Picosat' }}
+      publish-docs:   ${{ matrix.sat_solver == 'Picosat' }}
+      release:        ${{ matrix.sat_solver == 'Picosat' }}
