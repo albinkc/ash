@@ -60,6 +60,14 @@ defmodule Ash.MixProject do
         "documentation/topics/about_ash/design-principles.md",
         "documentation/topics/about_ash/contributing-to-ash.md",
         "documentation/topics/about_ash/alternatives.md",
+        "documentation/topics/development/project-structure.md",
+        "documentation/topics/development/working-with-llms.md",
+        "documentation/topics/development/generators.md",
+        "documentation/topics/development/error-handling.md",
+        "documentation/topics/development/testing.md",
+        "documentation/topics/development/development-utilities.md",
+        "documentation/topics/development/backwards-compatibility-config.md",
+        "documentation/topics/development/upgrading-to-3.0.md",
         "documentation/topics/resources/domains.md",
         "documentation/topics/resources/attributes.md",
         "documentation/topics/resources/relationships.md",
@@ -86,13 +94,6 @@ defmodule Ash.MixProject do
         "documentation/topics/advanced/timeouts.md",
         "documentation/topics/advanced/multitenancy.md",
         "documentation/topics/advanced/writing-extensions.md",
-        "documentation/topics/development/project-structure.md",
-        "documentation/topics/development/generators.md",
-        "documentation/topics/development/error-handling.md",
-        "documentation/topics/development/testing.md",
-        "documentation/topics/development/development-utilities.md",
-        "documentation/topics/development/backwards-compatibility-config.md",
-        "documentation/topics/development/upgrading-to-3.0.md",
         "documentation/moved/upgrade.md",
         "documentation/topics/security/actors-and-authorization.md",
         "documentation/topics/security/sensitive-data.md",
@@ -118,6 +119,7 @@ defmodule Ash.MixProject do
           ~r"documentation/topics/about_ash",
           "CHANGELOG.md"
         ],
+        Development: ~r"documentation/topics/development",
         Reference: [
           ~r"documentation/topics/reference",
           ~r"documentation/dsls"
@@ -125,7 +127,6 @@ defmodule Ash.MixProject do
         Resources: ~r"documentation/topics/resources",
         Actions: ~r"documentation/topics/actions",
         Security: ~r"documentation/topics/security",
-        Development: ~r"documentation/topics/development",
         Advanced: ~r"documentation/topics/advanced",
         "How To": ~r"documentation/how-to",
         Moved: [
@@ -335,7 +336,7 @@ defmodule Ash.MixProject do
       licenses: ["MIT"],
       maintainers: ["Zach Daniel"],
       files: ~w(lib .formatter.exs mix.exs README* LICENSE*
-      CHANGELOG* documentation),
+      CHANGELOG* documentation usage-rules.md),
       links: %{
         GitHub: "https://github.com/ash-project/ash",
         Discord: "https://discord.gg/HTHRaaVPUc",
@@ -355,7 +356,7 @@ defmodule Ash.MixProject do
   defp deps do
     [
       # DSLs
-      {:spark, "~> 2.1 and >= 2.2.29"},
+      {:spark, "~> 2.1 and >= 2.2.60"},
       # Ash resources are backed by ecto scheams
       {:ecto, "~> 3.7"},
       # Used by the ETS data layer
