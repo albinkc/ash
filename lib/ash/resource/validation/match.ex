@@ -13,7 +13,7 @@ defmodule Ash.Resource.Validation.Match do
       hide: true
     ],
     match: [
-      type: {:custom, Ash.Type.String, :match, []},
+      type: :regex_as_mfa,
       required: true,
       doc: "The value that the attribute should match against"
     ],
@@ -44,24 +44,29 @@ defmodule Ash.Resource.Validation.Match do
   end
 
   @impl true
-  def validate(changeset, opts, _context) do
+  def supports(_opts), do: [Ash.Changeset, Ash.Query, Ash.ActionInput]
+
+  @impl true
+  def validate(subject, opts, _context) do
     value =
-      if argument?(changeset.action, opts[:attribute]) do
-        Ash.Changeset.fetch_argument(changeset, opts[:attribute])
+      if argument?(subject.action, opts[:attribute]) do
+        Ash.Subject.fetch_argument(subject, opts[:attribute])
       else
-        {:ok, Ash.Changeset.get_attribute(changeset, opts[:attribute])}
+        case subject do
+          %Ash.Changeset{} -> {:ok, Ash.Changeset.get_attribute(subject, opts[:attribute])}
+          _ -> :error
+        end
       end
 
     case value do
       {:ok, value} when not is_nil(value) ->
         case string_value(value, opts) do
           {:ok, value} ->
+            {m, f, a} =
+              opts[:match]
+
             match =
-              case opts[:match] do
-                %Regex{} = regex -> regex
-                {regex, flags} -> Regex.compile!(regex, flags)
-                string -> Regex.compile!(string)
-              end
+              apply(m, f, a)
 
             if String.match?(value, match) do
               :ok

@@ -186,6 +186,7 @@ defmodule Ash.Generator do
   * `:overrides` - A keyword list or map of `t:overrides()`
   * `:actor` - Passed through to the changeset
   * `:tenant` - Passed through to the changeset
+  * `:scope` - Passed through to the changeset
   * `:uses` - A map of generators that are passed into your `defaults`. `defaults` must be a
     function. This is useful when multiple things in your `defaults` need to use the same generated
     value.
@@ -193,7 +194,7 @@ defmodule Ash.Generator do
   * `:context` - Passed through to the changeset
   * `:after_action` - A one argument function that takes the result and returns
     a new result to run after the record is created.
-  * `:private_arguments` - A map of private arguments, whos values can also be generators. Can also
+  * `:private_arguments` - A map of private arguments, whose values can also be generators. Can also
     be a function when using the `:uses` option.
 
   ## The `uses` option
@@ -263,6 +264,7 @@ defmodule Ash.Generator do
                   Keyword.take(opts, [
                     :actor,
                     :tenant,
+                    :scope,
                     :authorize?,
                     :context,
                     :upsert?,
@@ -307,6 +309,7 @@ defmodule Ash.Generator do
                 Keyword.take(opts, [
                   :actor,
                   :tenant,
+                  :scope,
                   :authorize?,
                   :context,
                   :upsert?,
@@ -388,6 +391,7 @@ defmodule Ash.Generator do
   * `:overrides` - A keyword list or map of `t:overrides()`
   * `:actor` - Passed through to the changeset
   * `:tenant` - Passed through to the changeset
+  * `:scope` - Passed through to the changeset
   * `:uses` - A map of generators that are passed into the first argument, if it is a function.
   * `:authorize?` - Passed through to the changeset
   * `:context` - Passed through to the changeset
@@ -853,7 +857,7 @@ defmodule Ash.Generator do
 
     resource
     |> Ash.Resource.Info.attributes()
-    |> Enum.filter(&(&1.name in action.accept))
+    |> Enum.filter(&(&1.name in Map.get(action, :accept, [])))
     |> set_allow_nil(action)
     |> Enum.concat(arguments)
     |> generate_attributes(generators, false, action.type, Enum.map(action.arguments, & &1.name))
@@ -1028,7 +1032,7 @@ defmodule Ash.Generator do
           action_type == :create ->
             attribute.default
 
-          action_type in [:update, :destroy] ->
+          action_type in [:update, :destroy] and is_struct(attribute, Ash.Resource.Attribute) ->
             attribute.update_default
 
           true ->

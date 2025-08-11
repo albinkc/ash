@@ -48,6 +48,11 @@ if Code.ensure_loaded?(Igniter) do
     These installation instructions apply both to new projects and existing ones.
     """
 
+    @skip_protocol_consolidation """
+    To avoid warnings about protocol consolidation when recompiling in dev, we
+    set protocolc onsolidation to happen only in non-dev environments.
+    """
+
     @dependency_setup """
     See the readmes for `spark` and `reactor` for more information on their installation.
     We've included their changes here for your convenience.
@@ -83,6 +88,24 @@ if Code.ensure_loaded?(Igniter) do
         |> Igniter.Scribe.patch(&Igniter.compose_task(&1, "spark.install"))
         |> Igniter.Scribe.patch(&Igniter.compose_task(&1, "reactor.install"))
       end)
+      |> Igniter.Scribe.section(
+        "Skip protocol consolidation",
+        @skip_protocol_consolidation,
+        fn igniter ->
+          igniter
+          |> Igniter.Project.MixProject.update(:project, [:consolidate_protocols], fn
+            nil ->
+              {:ok,
+               {:code,
+                quote do
+                  Mix.env() != :dev
+                end}}
+
+            other ->
+              {:ok, other}
+          end)
+        end
+      )
       |> Igniter.Scribe.section("Setup The Formatter", @setup_formatter, fn igniter ->
         igniter
         |> Igniter.Scribe.patch(&Igniter.Project.Formatter.import_dep(&1, :ash))
@@ -98,6 +121,27 @@ if Code.ensure_loaded?(Igniter) do
           )
         end)
       end)
+      |> Igniter.Scribe.section(
+        "Configure Dev/Test environments",
+        @setup_backwards_compatibility,
+        fn igniter ->
+          Igniter.Scribe.patch(igniter, fn igniter ->
+            igniter
+            |> Igniter.Project.Config.configure(
+              "test.exs",
+              :ash,
+              [:policies, :show_policy_breakdowns?],
+              true
+            )
+            |> Igniter.Project.Config.configure(
+              "dev.exs",
+              :ash,
+              [:policies, :show_policy_breakdowns?],
+              true
+            )
+          end)
+        end
+      )
       |> Igniter.Scribe.section(
         "Setup Backwards Compatibility Configurations",
         @setup_backwards_compatibility,

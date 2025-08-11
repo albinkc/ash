@@ -827,7 +827,8 @@ defmodule Ash.Actions.Destroy.Bulk do
 
   defp set_strategy(opts, resource, inputs_is_enumerable? \\ false) do
     opts =
-      if Ash.DataLayer.data_layer_can?(resource, :update_query) do
+      if Ash.DataLayer.data_layer_can?(resource, :update_query) &&
+           Ash.DataLayer.data_layer_can?(resource, :expr_error) do
         opts
       else
         Keyword.put(opts, :strategy, [:stream])
@@ -1249,6 +1250,7 @@ defmodule Ash.Actions.Destroy.Bulk do
     |> Ash.Actions.Helpers.add_context(opts)
     |> Ash.Changeset.set_context(opts[:context] || %{})
     |> Ash.Changeset.prepare_changeset_for_action(action, opts)
+    |> Ash.Changeset.set_private_arguments_for_action(opts[:private_arguments] || %{})
     |> Ash.Changeset.set_arguments(arguments)
     |> then(fn changeset ->
       changeset =
@@ -1617,7 +1619,7 @@ defmodule Ash.Actions.Destroy.Bulk do
         all_changes,
         opts,
         ref,
-        :bulk_destroy_index
+        :bulk_destroy
       )
 
     changesets_by_index = index_changesets(batch)
@@ -1669,6 +1671,7 @@ defmodule Ash.Actions.Destroy.Bulk do
     |> Ash.Changeset.new()
     |> Map.put(:domain, domain)
     |> Ash.Changeset.prepare_changeset_for_action(action, opts)
+    |> Ash.Changeset.set_private_arguments_for_action(opts[:private_arguments] || %{})
     |> Ash.Changeset.put_context(:bulk_destroy, %{index: index})
     |> Ash.Changeset.set_context(opts[:context] || %{})
     |> handle_params(

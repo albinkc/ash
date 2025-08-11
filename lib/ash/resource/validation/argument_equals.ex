@@ -36,8 +36,11 @@ defmodule Ash.Resource.Validation.ArgumentEquals do
   end
 
   @impl true
-  def validate(changeset, opts, _context) do
-    value = Ash.Changeset.get_argument(changeset, opts[:argument])
+  def supports(_opts), do: [Ash.Changeset, Ash.Query, Ash.ActionInput]
+
+  @impl true
+  def validate(subject, opts, _context) do
+    value = Ash.Subject.get_argument(subject, opts[:argument])
 
     if value != opts[:value] do
       {:error,
@@ -50,8 +53,8 @@ defmodule Ash.Resource.Validation.ArgumentEquals do
   end
 
   @impl true
-  def atomic(changeset, opts, context) do
-    validate(changeset, opts, context)
+  def atomic(subject, opts, context) do
+    validate(subject, opts, context)
   end
 
   @impl true

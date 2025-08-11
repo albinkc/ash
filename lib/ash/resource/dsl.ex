@@ -201,7 +201,7 @@ defmodule Ash.Resource.Dsl do
           allow_nil? false
 
           constraints [
-            match: "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
+            match: ~r/^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/
           ]
         end
 
@@ -477,7 +477,7 @@ defmodule Ash.Resource.Dsl do
     """,
     examples: [
       "validate {Mod, [foo: :bar]}",
-      "validate at_least_one_of_present([:first_name, :last_name])"
+      "validate present([:first_name, :last_name], at_least: 1)"
     ],
     target: Ash.Resource.Validation,
     schema: Ash.Resource.Validation.opt_schema(),
@@ -501,36 +501,6 @@ defmodule Ash.Resource.Dsl do
     no_depend_modules: [:validation],
     transform: {Ash.Resource.Validation, :transform, []},
     args: [:validation]
-  }
-
-  @action %Spark.Dsl.Entity{
-    name: :action,
-    describe: """
-    Declares a generic action. A combination of arguments, a return type and a run function.
-
-    For calling this action, see the `Ash.Domain` documentation.
-    """,
-    examples: [
-      """
-      action :top_user_emails, {:array, :string} do
-        argument :limit, :integer, default: 10, allow_nil?: false
-        run fn input, context ->
-          with {:ok, top_users} <- top_users(input.arguments.limit) do
-            {:ok, Enum.map(top_users, &(&1.email))}
-          end
-        end
-      end
-      """
-    ],
-    target: Ash.Resource.Actions.Action,
-    schema: Ash.Resource.Actions.Action.opt_schema(),
-    transform: {Ash.Resource.Actions.Action, :transform, []},
-    entities: [
-      arguments: [
-        @action_argument
-      ]
-    ],
-    args: [:name, {:optional, :returns}]
   }
 
   @create %Spark.Dsl.Entity{
@@ -587,6 +557,51 @@ defmodule Ash.Resource.Dsl do
     args: [:preparation]
   }
 
+  @action %Spark.Dsl.Entity{
+    name: :action,
+    describe: """
+    Declares a generic action. A combination of arguments, a return type and a run function.
+
+    For calling this action, see the `Ash.Domain` documentation.
+    """,
+    examples: [
+      """
+      action :top_user_emails, {:array, :string} do
+        argument :limit, :integer, default: 10, allow_nil?: false
+        run fn input, context ->
+          with {:ok, top_users} <- top_users(input.arguments.limit) do
+            {:ok, Enum.map(top_users, &(&1.email))}
+          end
+        end
+      end
+      """
+    ],
+    imports: [
+      Ash.Resource.Preparation.Builtins,
+      Ash.Resource.Validation.Builtins,
+      Ash.Expr
+    ],
+    target: Ash.Resource.Actions.Action,
+    schema: Ash.Resource.Actions.Action.opt_schema(),
+    transform: {Ash.Resource.Actions.Action, :transform, []},
+    entities: [
+      arguments: [
+        @action_argument
+      ],
+      preparations: [
+        @prepare,
+        %{
+          @validate
+          | schema:
+              @validate.schema
+              |> Keyword.delete(:always_atomic?)
+              |> Keyword.delete(:on)
+        }
+      ]
+    ],
+    args: [:name, {:optional, :returns}]
+  }
+
   @pagination %Spark.Dsl.Entity{
     name: :pagination,
     describe: """
@@ -611,6 +626,7 @@ defmodule Ash.Resource.Dsl do
     ],
     imports: [
       Ash.Resource.Preparation.Builtins,
+      Ash.Resource.Validation.Builtins,
       Ash.Expr
     ],
     target: Ash.Resource.Actions.Read,
@@ -622,7 +638,14 @@ defmodule Ash.Resource.Dsl do
         @action_argument
       ],
       preparations: [
-        @prepare
+        @prepare,
+        %{
+          @validate
+          | schema:
+              @validate.schema
+              |> Keyword.delete(:always_atomic?)
+              |> Keyword.delete(:on)
+        }
       ],
       pagination: [
         @pagination
@@ -676,6 +699,8 @@ defmodule Ash.Resource.Dsl do
     name: :destroy,
     describe: """
     Declares a `destroy` action. For calling this action, see the `Ash.Domain` documentation.
+
+    See `Ash.Resource.Change.Builtins.cascade_destroy/2` for cascading destroy operations.
     """,
     examples: [
       """
@@ -1039,7 +1064,7 @@ defmodule Ash.Resource.Dsl do
       """
       validations do
         validate {Mod, [foo: :bar]}
-        validate at_least_one_of_present([:first_name, :last_name])
+        validate present([:first_name, :last_name], at_least: 1)
       end
       """
     ],
@@ -1123,12 +1148,19 @@ defmodule Ash.Resource.Dsl do
 
     Supports `filter`, but not `sort` (because that wouldn't affect the count)
 
+    Can aggregate over relationships using a relationship path, or directly over another resource.
+
     See the [aggregates guide](/documentation/topics/resources/aggregates.md) for more.
     """,
     examples: [
       """
       count :assigned_ticket_count, :assigned_tickets do
         filter [active: true]
+      end
+      """,
+      """
+      count :matching_profiles_count, Profile do
+        filter expr(name == parent(name))
       end
       """
     ],
@@ -1143,6 +1175,7 @@ defmodule Ash.Resource.Dsl do
         doc: "Whether or not to count unique values only",
         default: false
       ),
+    transform: {Ash.Resource.Aggregate, :transform, []},
     auto_set_fields: [kind: :count]
   }
 
@@ -1176,6 +1209,7 @@ defmodule Ash.Resource.Dsl do
         doc:
           "Whether or not to include `nil` values in the aggregate. Only relevant for `list` and `first` aggregates."
       ),
+    transform: {Ash.Resource.Aggregate, :transform, []},
     auto_set_fields: [kind: :first]
   }
 
@@ -1201,6 +1235,7 @@ defmodule Ash.Resource.Dsl do
     target: Ash.Resource.Aggregate,
     args: [:name, :relationship_path, :field],
     schema: Ash.Resource.Aggregate.schema() |> Keyword.delete(:sort),
+    transform: {Ash.Resource.Aggregate, :transform, []},
     auto_set_fields: [kind: :max]
   }
 
@@ -1226,6 +1261,7 @@ defmodule Ash.Resource.Dsl do
     target: Ash.Resource.Aggregate,
     args: [:name, :relationship_path, :field],
     schema: Ash.Resource.Aggregate.schema() |> Keyword.delete(:sort),
+    transform: {Ash.Resource.Aggregate, :transform, []},
     auto_set_fields: [kind: :min]
   }
 
@@ -1251,6 +1287,7 @@ defmodule Ash.Resource.Dsl do
     target: Ash.Resource.Aggregate,
     args: [:name, :relationship_path, :field],
     schema: Keyword.delete(Ash.Resource.Aggregate.schema(), :sort),
+    transform: {Ash.Resource.Aggregate, :transform, []},
     auto_set_fields: [kind: :sum]
   }
 
@@ -1276,6 +1313,7 @@ defmodule Ash.Resource.Dsl do
     target: Ash.Resource.Aggregate,
     args: [:name, :relationship_path, :field],
     schema: Keyword.delete(Ash.Resource.Aggregate.schema(), :sort),
+    transform: {Ash.Resource.Aggregate, :transform, []},
     auto_set_fields: [kind: :avg]
   }
 
@@ -1299,6 +1337,7 @@ defmodule Ash.Resource.Dsl do
     target: Ash.Resource.Aggregate,
     args: [:name, :relationship_path],
     schema: Keyword.drop(Ash.Resource.Aggregate.schema(), [:sort, :field]),
+    transform: {Ash.Resource.Aggregate, :transform, []},
     auto_set_fields: [kind: :exists]
   }
 
@@ -1337,6 +1376,7 @@ defmodule Ash.Resource.Dsl do
         required: true,
         doc: "The module that implements the relevant data layer callbacks"
       ),
+    transform: {Ash.Resource.Aggregate, :transform, []},
     auto_set_fields: [kind: :custom]
   }
 
@@ -1375,6 +1415,7 @@ defmodule Ash.Resource.Dsl do
         doc:
           "Whether or not to include `nil` values in the aggregate. Only relevant for `list` and `first` aggregates."
       ),
+    transform: {Ash.Resource.Aggregate, :transform, []},
     auto_set_fields: [kind: :list]
   }
 
@@ -1606,6 +1647,7 @@ defmodule Ash.Resource.Dsl do
     Ash.Resource.Verifiers.VerifyIdentityFields,
     Ash.Resource.Verifiers.VerifyPrimaryReadActionHasNoArguments,
     Ash.Resource.Verifiers.VerifySelectedByDefault,
+    Ash.Resource.Verifiers.VerifyFilterExpressions,
     Ash.Resource.Verifiers.EnsureAggregateFieldIsAttributeOrCalculation,
     Ash.Resource.Verifiers.ValidateRelationshipAttributes,
     Ash.Resource.Verifiers.NoReservedFieldNames,

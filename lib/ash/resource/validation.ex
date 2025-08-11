@@ -59,11 +59,20 @@ defmodule Ash.Resource.Validation do
   end
 
   @callback init(opts :: Keyword.t()) :: {:ok, Keyword.t()} | {:error, String.t()}
-  @callback validate(changeset :: Ash.Changeset.t(), opts :: Keyword.t(), context :: Context.t()) ::
+  @callback supports(opts :: Keyword.t()) :: [Ash.Changeset | Ash.Query | Ash.ActionInput]
+  @callback validate(
+              changeset_query_or_input :: Ash.Changeset.t() | Ash.ActionInput.t(),
+              opts :: Keyword.t(),
+              context :: Context.t()
+            ) ::
               :ok | {:error, term}
   @callback describe(opts :: Keyword.t()) ::
               String.t() | [{:message, String.t()} | {:vars, Keyword.t()}]
-  @callback atomic(changeset :: Ash.Changeset.t(), opts :: Keyword.t(), context :: Context.t()) ::
+  @callback atomic(
+              changeset_query_or_input :: Ash.Changeset.t() | Ash.ActionInput.t(),
+              opts :: Keyword.t(),
+              context :: Context.t()
+            ) ::
               :ok
               | {:atomic, involved_fields :: list(atom) | :*, condition_expr :: Ash.Expr.t(),
                  error_expr :: Ash.Expr.t()}
@@ -98,17 +107,17 @@ defmodule Ash.Resource.Validation do
       """
     ],
     on: [
-      type: {:wrap_list, {:in, [:create, :update, :destroy]}},
+      type: {:wrap_list, {:in, [:create, :update, :destroy, :read, :action]}},
       default: [:create, :update],
       doc: """
-      The action types the validation should run on. Many validations don't make sense in the context of deletion, so by default it is not included.
+      The action types the validation should run on. Many validations don't make sense in the context of destroy, read, or generic actions, so by default they are not included.
       """
     ],
     only_when_valid?: [
       type: :boolean,
       default: false,
       doc:
-        "If the validation should only run on valid changes. Useful for expensive validations or validations that depend on valid data."
+        "If the validation should only run on valid changesets. Useful for expensive validations or validations that depend on valid data."
     ],
     message: [
       type: :string,
@@ -144,6 +153,9 @@ defmodule Ash.Resource.Validation do
       @impl true
       def init(opts), do: {:ok, opts}
 
+      @impl true
+      def supports(_opts), do: [Ash.Changeset]
+
       defp with_description(keyword, opts) do
         if Kernel.function_exported?(__MODULE__, :describe, 1) do
           keyword ++ apply(__MODULE__, :describe, [opts])
@@ -152,7 +164,7 @@ defmodule Ash.Resource.Validation do
         end
       end
 
-      defoverridable init: 1
+      defoverridable init: 1, supports: 1
     end
   end
 
@@ -187,6 +199,17 @@ defmodule Ash.Resource.Validation do
 
   @doc false
   def transform(%{validation: {module, opts}} = validation) do
+    opts =
+      Enum.map(opts, fn
+        {key, %Regex{} = value} when module == Ash.Resource.Validation.Match ->
+          source = Regex.source(value)
+          opts = Regex.opts(value)
+          {key, {Spark.Regex, :cache, [source, opts]}}
+
+        {key, value} ->
+          {key, value}
+      end)
+
     {:ok,
      %{
        validation

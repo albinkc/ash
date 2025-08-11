@@ -19,7 +19,7 @@ defmodule Ash.Type.NewType do
 
   ```elixir
   defmodule MyApp.Types.SSN do
-    use Ash.Type.NewType, subtype_of: :string, constraints: [match: "regex for ssn"]
+    use Ash.Type.NewType, subtype_of: :string, constraints: [match: ~r/regex for ssn/]
   end
 
   defmodule MyApp.Types.Metadata do
@@ -195,6 +195,13 @@ defmodule Ash.Type.NewType do
         with {:ok, value} <- unquote(subtype_of).cast_input(value, constraints) do
           Ash.Type.apply_constraints(unquote(subtype_of), value, constraints)
         end
+      end
+
+      @impl Ash.Type
+      def coerce(value, constraints) do
+        constraints = get_constraints(constraints)
+
+        unquote(subtype_of).coerce(value, constraints)
       end
 
       @impl Ash.Type
@@ -452,7 +459,7 @@ defmodule Ash.Type.NewType do
                   {key, field}, :ok ->
                     field_keys = field |> List.wrap() |> Keyword.keys()
 
-                    case field_keys -- [:type, :constraints, :allow_nil?] do
+                    case field_keys -- [:type, :constraints, :allow_nil?, :description] do
                       [] ->
                         {:cont, validate_constraints(field[:type], field[:constraints])}
 

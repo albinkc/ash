@@ -81,7 +81,7 @@ This is similar to using `Repo.get/2` and `Repo.preload/2` directly outside of c
 ```elixir
 # In your domain
 resource DashboardGroup do
-  define :get_by_id, action: :read, get_by: [:id]
+  define :get_dashboard_group_by_id, action: :read, get_by: [:id]
 end
 
 # In your LiveView or Controller
@@ -300,6 +300,63 @@ define :follow_artist do
 end
 ```
 
+### Default Options
+
+You can provide default options that will be merged with client-provided options using the `default_options` configuration. This is useful for setting common options that should be applied to all calls of a particular interface function.
+
+`default_options` accepts either:
+- A keyword list of static options
+- A zero-arity function that returns a keyword list of dynamic options
+
+#### Static Default Options
+
+```elixir
+code_interface do
+  define :get_user, action: :read, get_by: [:id],
+    default_options: [
+      load: [:profile, :posts]
+    ]
+end
+```
+
+With this configuration, calling `MyApp.get_user(123)` will automatically load the profile and posts relationships and enable authorization.
+
+#### Dynamic Default Options
+
+For options that need to be computed at runtime, you can provide a function:
+
+```elixir
+code_interface do
+  define :get_user_with_timestamp, action: :read, get_by: [:id],
+    default_options: fn ->
+      [
+        load: [:profile],
+        context: %{
+          requested_at: DateTime.utc_now(),
+          request_id: System.unique_integer()
+        }
+      ]
+    end
+end
+```
+
+The function is called each time the interface function is invoked, allowing for dynamic values like timestamps or request IDs.
+
+#### Option Merging Behavior
+
+Default options are merged with client-provided options using the following rules:
+
+- Most options: Client options override defaults
+- `:load` options: Combined (both default and client loads are applied)
+- `:bulk_options` and `:page` options: Deep merged (keyword lists are merged together)
+
+Example:
+```elixir
+# With default_options: [load: [:profile], authorize?: true]
+MyApp.get_user(123, load: [:posts], authorize?: false)
+# Results in: [load: [:profile, :posts], authorize?: false]
+```
+
 ### Authorization Functions
 
 For each action defined in a code interface, Ash automatically generates corresponding authorization check functions:
@@ -326,3 +383,19 @@ end
 ```
 
 These functions are particularly useful for conditional rendering of UI elements based on user permissions.
+
+#### Authorization Function Options
+
+The authorization functions accept the same options as `Ash.can/3` and `Ash.can?/3`, including:
+
+- `log?` - Whether to log the authorization result at `:info` level for debugging purposes
+
+```elixir
+# Enable logging for this specific authorization check
+if MyApp.Blog.can_update_post?(current_user, post, log?: true) do
+  # Show edit button
+end
+
+# This will log authorization details to help with debugging
+MyApp.Blog.can_create_post(current_user, %{title: "New Post"}, log?: true)
+```

@@ -92,7 +92,7 @@ defmodule Ash.Scope do
       MyApp.Domain.do_something_else(..., scope: context)
       # if not using as a scope, the alternative is this
       # in the future this will be deprecated
-      MyApp.Domain.do_somethign_else(..., Ash.Context.to_opts(context))
+      MyApp.Domain.do_something_else(..., Ash.Context.to_opts(context))
     end)
   end
   ```
@@ -109,7 +109,7 @@ defmodule Ash.Scope do
       authorize?: Ash.Scope.ToOpts.get_authorize?(scope)
     ]
     |> Enum.flat_map(fn
-      {key, {:ok, value}} when not is_nil(value) ->
+      {key, {:ok, value}} when not is_nil(value) or key == :actor ->
         [{key, value}]
 
       _ ->
@@ -142,6 +142,19 @@ defmodule Ash.Scope do
     @doc "Extracts the `authorize?` option from the scope"
     @spec get_authorize?(term()) :: {:ok, boolean()} | :error
     def get_authorize?(scope)
+  end
+
+  defimpl Ash.Scope.ToOpts, for: Ash.Policy.Authorizer do
+    def get_actor(%{actor: actor}), do: {:ok, actor}
+
+    def get_tenant(%{subject: %{tenant: tenant}}), do: {:ok, tenant}
+    def get_tenant(_), do: :error
+
+    def get_context(%{context: context}),
+      do: {:ok, Map.take(context || %{}, [:shared])}
+
+    def get_tracer(%{subject: %{context: %{private: %{tracer: tracer}}}}), do: {:ok, tracer}
+    def get_authorize?(_), do: :error
   end
 
   defimpl Ash.Scope.ToOpts,

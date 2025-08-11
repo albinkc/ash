@@ -29,42 +29,7 @@ defmodule Ash.Type do
     ]
   ]
 
-  @builtin_short_names [
-    map: Ash.Type.Map,
-    keyword: Ash.Type.Keyword,
-    term: Ash.Type.Term,
-    atom: Ash.Type.Atom,
-    tuple: Ash.Type.Tuple,
-    string: Ash.Type.String,
-    integer: Ash.Type.Integer,
-    file: Ash.Type.File,
-    float: Ash.Type.Float,
-    duration_name: Ash.Type.DurationName,
-    function: Ash.Type.Function,
-    boolean: Ash.Type.Boolean,
-    struct: Ash.Type.Struct,
-    uuid: Ash.Type.UUID,
-    uuid_v7: Ash.Type.UUIDv7,
-    binary: Ash.Type.Binary,
-    date: Ash.Type.Date,
-    time: Ash.Type.Time,
-    time_usec: Ash.Type.TimeUsec,
-    decimal: Ash.Type.Decimal,
-    ci_string: Ash.Type.CiString,
-    naive_datetime: Ash.Type.NaiveDatetime,
-    utc_datetime: Ash.Type.UtcDatetime,
-    utc_datetime_usec: Ash.Type.UtcDatetimeUsec,
-    datetime: Ash.Type.DateTime,
-    duration: Ash.Type.Duration,
-    url_encoded_binary: Ash.Type.UrlEncodedBinary,
-    union: Ash.Type.Union,
-    module: Ash.Type.Module,
-    vector: Ash.Type.Vector
-  ]
-
-  @custom_short_names Application.compile_env(:ash, :custom_types, [])
-
-  @short_names @custom_short_names ++ @builtin_short_names
+  alias Ash.Type.Registry
 
   @doc_array_constraints Keyword.put(@array_constraints, :items,
                            type: :any,
@@ -76,7 +41,7 @@ defmodule Ash.Type do
 
   ## Built in types
 
-  #{Enum.map_join(@builtin_short_names, fn {key, module} -> "* `#{inspect(key)}` - `#{inspect(module)}`\n" end)}
+  #{Enum.map_join(Registry.builtin_short_names(), fn {key, module} -> "* `#{inspect(key)}` - `#{inspect(module)}`\n" end)}
 
   ## Lists/Arrays
 
@@ -198,7 +163,7 @@ defmodule Ash.Type do
       doc: "Enforces a minimum length on the value"
     ],
     match: [
-      type: {:custom, Ash.Type.String, :match, []},
+      type: :regex_as_mfa,
       doc: "Enforces that the string matches a passed in regex"
     ],
     trim?: [type: :boolean, doc: "Trims the value.", default: true],
@@ -675,15 +640,13 @@ defmodule Ash.Type do
     evaluate_operator: 1
   ]
 
-  @builtin_types Keyword.values(@builtin_short_names)
+  @builtin_types Registry.builtin_types()
 
   @doc false
-  def builtin_types do
-    @builtin_types
-  end
+  def builtin_types, do: Registry.builtin_types()
 
   @doc "Returns the list of available type short names"
-  def short_names, do: @short_names
+  def short_names, do: Registry.short_names()
 
   @doc "Returns true if the type is an ash builtin type"
   def builtin?(type) when type in @builtin_types, do: true
@@ -726,7 +689,7 @@ defmodule Ash.Type do
     {:array, get_type(value)}
   end
 
-  for {short_name, value} <- @short_names do
+  for {short_name, value} <- Registry.short_names() do
     def get_type(unquote(short_name)), do: unquote(value)
   end
 
@@ -758,7 +721,7 @@ defmodule Ash.Type do
 
       Valid types include any custom types, or the following short codes (alongside the types they map to):
 
-      #{Enum.map_join(@short_names, "\n", fn {name, type} -> "  #{inspect(name)} -> #{inspect(type)}" end)}
+      #{Enum.map_join(Registry.short_names(), "\n", fn {name, type} -> "  #{inspect(name)} -> #{inspect(type)}" end)}
 
       """
     end
@@ -937,7 +900,7 @@ defmodule Ash.Type do
   @spec ecto_type(t) :: Ecto.Type.t()
   def ecto_type({:array, type}), do: {:array, ecto_type(type)}
 
-  for {name, mod} <- @short_names do
+  for {name, mod} <- Registry.short_names() do
     def ecto_type(unquote(name)), do: ecto_type(unquote(mod))
   end
 
@@ -1203,54 +1166,49 @@ defmodule Ash.Type do
   def apply_constraints({:array, type}, term, constraints) when is_list(term) do
     type = get_type(type)
 
-    list_constraint_errors = list_constraint_errors(term, constraints)
     item_constraints = item_constraints(constraints)
 
-    case list_constraint_errors do
-      [] ->
-        nil_items? = Keyword.get(constraints, :nil_items?, false)
-        remove_nil_items? = Keyword.get(constraints, :remove_nil_items?, false)
+    nil_items? = Keyword.get(constraints, :nil_items?, false)
+    remove_nil_items? = Keyword.get(constraints, :remove_nil_items?, false)
 
-        term
-        |> Enum.with_index()
-        |> Enum.reduce({[], []}, fn {item, index}, {items, errors} ->
-          if type.custom_apply_constraints_array?() do
-            maybe_handle_nil_item(item, index, items, errors, nil_items?, remove_nil_items?)
-          else
-            case apply_constraints(type, item, item_constraints) do
-              {:ok, value} ->
-                maybe_handle_nil_item(value, index, items, errors, nil_items?, remove_nil_items?)
+    {terms, errors} =
+      term
+      |> Enum.with_index()
+      |> Enum.reduce({[], []}, fn {item, index}, {items, errors} ->
+        if type.custom_apply_constraints_array?() do
+          maybe_handle_nil_item(item, index, items, errors, nil_items?, remove_nil_items?)
+        else
+          case apply_constraints(type, item, item_constraints) do
+            {:ok, value} ->
+              maybe_handle_nil_item(value, index, items, errors, nil_items?, remove_nil_items?)
 
-              {:error, new_errors} ->
-                new_errors =
-                  new_errors
-                  |> List.wrap()
-                  |> Ash.Helpers.flatten_preserving_keywords()
-                  |> Enum.map(fn
-                    string when is_binary(string) ->
-                      [message: string, index: index]
+            {:error, new_errors} ->
+              new_errors =
+                new_errors
+                |> List.wrap()
+                |> Ash.Helpers.flatten_preserving_keywords()
+                |> Enum.map(fn
+                  string when is_binary(string) ->
+                    [message: string, index: index]
 
-                    vars ->
-                      Keyword.put(vars, :index, index)
-                  end)
+                  vars ->
+                    Keyword.put(vars, :index, index)
+                end)
 
-                {[item | items], List.wrap(new_errors) ++ errors}
-            end
+              {[item | items], List.wrap(new_errors) ++ errors}
           end
-        end)
-        |> case do
-          {terms, []} ->
-            if type.custom_apply_constraints_array?() do
-              case type.apply_constraints_array(Enum.reverse(terms), item_constraints) do
-                :ok -> {:ok, term}
-                other -> other
-              end
-            else
-              {:ok, Enum.reverse(terms)}
-            end
+        end
+      end)
 
-          {_, errors} ->
-            {:error, errors}
+    case errors ++ list_constraint_errors(terms, constraints) do
+      [] ->
+        if type.custom_apply_constraints_array?() do
+          case type.apply_constraints_array(Enum.reverse(terms), item_constraints) do
+            :ok -> {:ok, term}
+            other -> other
+          end
+        else
+          {:ok, Enum.reverse(terms)}
         end
 
       errors ->
@@ -1759,7 +1717,10 @@ defmodule Ash.Type do
 
         @impl true
         def cast(term, params) do
-          @parent.cast_input(term, params)
+          # we coerce because ecto casting happens
+          # only in filters/changesets for us after
+          # we've validated everything
+          @parent.coerce(term, params)
         end
 
         @impl true
@@ -2254,8 +2215,39 @@ defmodule Ash.Type do
 
   defp set_update_default(thing, _type, _constraints), do: {:ok, thing}
 
+  @reserved_constraints [
+    :default,
+    :source,
+    :autogenerate,
+    :read_after_writes,
+    :virtual,
+    :primary_key,
+    :load_in_query,
+    :redact,
+    :skip_default_validation,
+    :writable
+  ]
+
   @doc false
   def validate_constraints(type, constraints) do
+    used_reserved_keys =
+      Enum.filter(
+        @reserved_constraints,
+        &Keyword.has_key?(constraints, &1)
+      )
+
+    if Enum.any?(used_reserved_keys) do
+      raise """
+      Reserved constraint key used:
+
+      #{inspect(used_reserved_keys)}
+
+      The following keys cannot be used as constraint keys because they are `Ecto.Schema.field` options.
+
+      #{Enum.map_join(used_reserved_keys, "\n", &"  * #{&1}")}
+      """
+    end
+
     case type do
       {:array, type} ->
         array_constraints = array_constraints(type)
@@ -2384,6 +2376,16 @@ defmodule Ash.Type do
         else
           def can_load?(_), do: false
         end
+      end
+
+      if !Module.defines?(__MODULE__, {:rewrite, 3}, :def) do
+        @impl Ash.Type
+        def rewrite(value, _rewrites, _constraints), do: value
+      end
+
+      if !Module.defines?(__MODULE__, {:get_rewrites, 4}, :def) do
+        @impl Ash.Type
+        def get_rewrites(_merged_load, _calculation, _path, _constraints), do: []
       end
     end
   end

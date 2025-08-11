@@ -94,6 +94,7 @@ defmodule Ash.Actions.Update do
                   context: changeset.context_changes,
                   notify?: true,
                   data: changeset.data,
+                  assume_casted?: true,
                   no_atomic_constraints: changeset.no_atomic_constraints,
                   atomics:
                     Keyword.merge(
@@ -207,6 +208,7 @@ defmodule Ash.Actions.Update do
 
         other ->
           if Ash.DataLayer.data_layer_can?(changeset.resource, :update_query) &&
+               Ash.DataLayer.data_layer_can?(changeset.resource, :expr_error) &&
                action.require_atomic? &&
                match?({:not_atomic, _reason}, other) do
             {:not_atomic, reason} = other

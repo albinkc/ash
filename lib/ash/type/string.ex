@@ -9,7 +9,7 @@ defmodule Ash.Type.String do
       doc: "Enforces a minimum length on the value"
     ],
     match: [
-      type: {:custom, __MODULE__, :match, []},
+      type: :regex_as_mfa,
       doc: "Enforces that the string matches a passed in regex"
     ],
     trim?: [
@@ -240,17 +240,10 @@ defmodule Ash.Type.String do
         end
 
       {:match, regex}, errors ->
+        {m, f, a} = regex
+
         regex =
-          case regex do
-            %Regex{} = regex ->
-              regex
-
-            {regex, flags} ->
-              Regex.compile!(regex, flags)
-
-            string ->
-              Regex.compile!(string)
-          end
+          apply(m, f, a)
 
         if Regex.match?(regex, value) do
           errors
@@ -281,8 +274,8 @@ defmodule Ash.Type.String do
   end
 
   @impl true
-  def coerce(value, constraints) do
-    case cast_input(value, constraints) do
+  def coerce(value, _constraints) do
+    case cast_input(value, allow_empty?: true, trim?: false) do
       {:ok, value} ->
         {:ok, value}
 
@@ -308,36 +301,5 @@ defmodule Ash.Type.String do
 
   def dump_to_native(value, _) do
     Ecto.Type.dump(:string, value)
-  end
-
-  @doc false
-  def match(%Regex{} = regex) do
-    IO.warn("""
-    Providing a regex in the `match` constraint is deprecated, as OTP 28 does not support it.
-    Please provide a string or a tuple of regex and flags instead.
-
-    For example:
-
-    Instead of
-        ~r/^[a-z]+$/i
-    Use
-        {~S/^[a-z]+$/, "i"}
-
-    Instead of
-        ~r/^[a-z]+$/
-    Use
-        ~S/^[a-z]+$/
-    """)
-
-    {:ok, regex}
-  end
-
-  def match(regex) when is_binary(regex) do
-    {:ok, regex}
-  end
-
-  def match(value) do
-    {:error,
-     "Must provide a string or a tuple of regex and flags (see warning), got: #{inspect(value)}"}
   end
 end

@@ -3,9 +3,12 @@ defmodule Ash.Resource.Preparation.BeforeAction do
 
   use Ash.Resource.Preparation
 
+  def supports(_opts), do: [Ash.Query, Ash.ActionInput]
+
   @doc false
-  @spec prepare(Ash.Query.t(), keyword, map) :: Ash.Query.t()
-  def prepare(query, opts, context) do
-    Ash.Query.before_action(query, fn query -> opts[:callback].(query, context) end)
+  @spec prepare(Ash.Query.t() | Ash.ActionInput.t(), keyword, map) ::
+          Ash.Query.t() | Ash.ActionInput.t()
+  def prepare(subject, opts, context) do
+    Ash.Subject.before_action(subject, fn subject -> opts[:callback].(subject, context) end)
   end
 end

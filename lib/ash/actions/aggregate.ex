@@ -83,10 +83,13 @@ defmodule Ash.Actions.Aggregate do
                  {:ok, aggregates} <- validate_aggregates(query, aggregates, opts),
                  {:ok, data_layer_query} <-
                    Ash.Query.data_layer_query(%Ash.Query{
+                     action: Ash.Resource.Info.action(query.resource, read_action),
                      resource: query.resource,
                      limit: query.limit,
                      offset: query.offset,
                      distinct: query.distinct,
+                     distinct_sort: query.distinct_sort,
+                     sort: query.sort,
                      domain: query.domain,
                      tenant: query.tenant,
                      filter: query.filter,

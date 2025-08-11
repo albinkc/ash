@@ -253,7 +253,7 @@ defmodule Ash.Resource.Info do
   end
 
   @doc "A list of all validations for the resource for a given action type"
-  @spec validations(Spark.Dsl.t() | Ash.Resource.t(), :create | :update | :destroy) :: [
+  @spec validations(Spark.Dsl.t() | Ash.Resource.t(), :create | :update | :destroy | :read) :: [
           Ash.Resource.Validation.t()
         ]
   def validations(resource, type) do
@@ -289,9 +289,11 @@ defmodule Ash.Resource.Info do
     Extension.get_entities(resource, [:changes])
   end
 
-  @spec preparations(Spark.Dsl.t() | Ash.Resource.t()) :: list(Ash.Resource.Preparation.t())
-  def preparations(resource) do
+  @spec preparations(Spark.Dsl.t() | Ash.Resource.t(), action_type :: :read | :action) ::
+          list(Ash.Resource.Preparation.t())
+  def preparations(resource, type \\ :read) do
     Extension.get_entities(resource, [:preparations])
+    |> Enum.filter(&(type in &1.on))
   end
 
   @doc "Whether or not a given module is a resource module"
@@ -932,4 +934,10 @@ defmodule Ash.Resource.Info do
   @doc "The data layer of the resource, or nil if it does not have one"
   @spec data_layer(Ash.Resource.t()) :: Ash.DataLayer.t() | nil
   defdelegate data_layer(resource), to: Ash.DataLayer
+
+  @doc """
+  Returns a list of extensions in use by the resource.
+  """
+  @spec extensions(resource :: Ash.Resource.t()) :: list(module())
+  defdelegate extensions(resource), to: Spark
 end

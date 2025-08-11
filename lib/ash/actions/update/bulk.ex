@@ -114,13 +114,18 @@ defmodule Ash.Actions.Update.Bulk do
             read_opts =
               opts
               |> then(fn read_opts ->
-                if opts[:batch_size] do
+                if opts[:stream_batch_size] do
                   Keyword.put(read_opts, :batch_size, opts[:stream_batch_size])
                 else
-                  read_opts
+                  Keyword.delete(read_opts, :batch_size)
                 end
               end)
               |> Keyword.put(:authorize?, opts[:authorize?] && opts[:authorize_query?])
+              |> Keyword.update(
+                :context,
+                %{query_for: :bulk_update},
+                &Map.put(&1, :query_for, :bulk_update)
+              )
               |> Keyword.put(:domain, domain)
               |> Keyword.delete(:load)
 
@@ -134,9 +139,22 @@ defmodule Ash.Actions.Update.Bulk do
                     results,
                     action,
                     input,
-                    Keyword.merge(opts,
-                      resource: query.resource,
-                      input_was_stream?: false
+                    Keyword.merge(
+                      opts,
+                      [
+                        resource: query.resource,
+                        input_was_stream?: false,
+                        context:
+                          opts[:atomic_changeset] &&
+                            Map.delete(opts[:atomic_changeset].context, :private)
+                      ],
+                      fn
+                        :context, v1, v2 ->
+                          Ash.Helpers.deep_merge_maps(v1, v2)
+
+                        _k, _v1, v2 ->
+                          v2
+                      end
                     ),
                     reason
                   )
@@ -149,7 +167,12 @@ defmodule Ash.Actions.Update.Bulk do
                   }
               end
             else
-              read_opts = Keyword.take(read_opts, Ash.stream_opt_keys())
+              read_opts =
+                Keyword.put(
+                  Keyword.take(read_opts, Ash.stream_opt_keys()),
+                  :batch_size,
+                  opts[:batch_size] || 100
+                )
 
               # We need to figure out a way to capture errors raised by the stream when picking items off somehow
               # for now, we only go this route if there are potentially more records in the result set than
@@ -165,9 +188,22 @@ defmodule Ash.Actions.Update.Bulk do
                 ),
                 action,
                 input,
-                Keyword.merge(opts,
-                  resource: query.resource,
-                  input_was_stream?: false
+                Keyword.merge(
+                  opts,
+                  [
+                    resource: query.resource,
+                    input_was_stream?: false,
+                    context:
+                      opts[:atomic_changeset] &&
+                        Map.delete(opts[:atomic_changeset].context, :private)
+                  ],
+                  fn
+                    :context, v1, v2 ->
+                      Ash.Helpers.deep_merge_maps(v1, v2)
+
+                    _k, _v1, v2 ->
+                      v2
+                  end
                 ),
                 reason
               )
@@ -1061,7 +1097,11 @@ defmodule Ash.Actions.Update.Bulk do
   defp set_strategy(opts, resource, inputs_is_enumerable? \\ false) do
     opts =
       if Ash.DataLayer.data_layer_can?(resource, :update_query) do
-        opts
+        if Ash.DataLayer.data_layer_can?(resource, :expr_error) do
+          opts
+        else
+          Keyword.put_new(opts, :strategy, [:stream, :atomic_batches, :atomic])
+        end
       else
         Keyword.put(opts, :strategy, [:stream])
       end
@@ -1112,7 +1152,7 @@ defmodule Ash.Actions.Update.Bulk do
                   opts,
                   :context,
                   %{private: context_cs.context.private},
-                  &Map.put(&1, :private, context_cs.context.private)
+                  &Map.put(&1 || %{}, :private, context_cs.context.private)
                 )
 
               Ash.Changeset.fully_atomic_changeset(resource, action, input, opts)
@@ -1574,6 +1614,7 @@ defmodule Ash.Actions.Update.Bulk do
     |> Ash.Actions.Helpers.add_context(opts)
     |> Ash.Changeset.set_context(opts[:context] || %{})
     |> Ash.Changeset.prepare_changeset_for_action(action, opts)
+    |> Ash.Changeset.set_private_arguments_for_action(opts[:private_arguments] || %{})
     |> Ash.Changeset.set_arguments(arguments)
     |> then(fn changeset ->
       changeset =
@@ -1940,6 +1981,7 @@ defmodule Ash.Actions.Update.Bulk do
     |> Ash.Changeset.new()
     |> Map.put(:domain, domain)
     |> Ash.Changeset.prepare_changeset_for_action(action, opts)
+    |> Ash.Changeset.set_private_arguments_for_action(opts[:private_arguments] || %{})
     |> Ash.Changeset.put_context(context_key, %{index: index})
     |> Ash.Changeset.set_context(opts[:context] || %{})
     |> Ash.Changeset.atomic_update(opts[:atomic_update] || [])
@@ -3140,7 +3182,7 @@ defmodule Ash.Actions.Update.Bulk do
 
           {:error, error} ->
             if validation.message do
-              error = Ash.Changeset.override_validation_message(error, validation.message)
+              error = Ash.Error.override_validation_message(error, validation.message)
               Ash.Changeset.add_error(changeset, error)
             else
               Ash.Changeset.add_error(changeset, error)
@@ -3154,6 +3196,19 @@ defmodule Ash.Actions.Update.Bulk do
 
   defp validate_batch_atomically(validation, batch, validation_context, context, actor) do
     Enum.map(batch, fn changeset ->
+      validation = %{
+        validation
+        | opts:
+            templated_opts(
+              validation.opts,
+              actor,
+              changeset.tenant,
+              changeset.arguments,
+              changeset.context,
+              changeset
+            )
+      }
+
       case Ash.Changeset.split_atomic_conditions(
              validation,
              changeset,
@@ -3205,6 +3260,17 @@ defmodule Ash.Actions.Update.Bulk do
                 | where:
                     Enum.filter(where, fn {module, _opts} ->
                       module.atomic?()
+                    end)
+                    |> Enum.map(fn {module, change_opts} ->
+                      {module,
+                       templated_opts(
+                         change_opts,
+                         actor,
+                         changeset.to_tenant,
+                         changeset.arguments,
+                         changeset.context,
+                         changeset
+                       )}
                     end),
                   change:
                     {module,

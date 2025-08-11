@@ -35,7 +35,7 @@ attributes do
     allow_nil? false
 
     constraints [
-      match: "^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+.[a-zA-Z0-9-.]+$"
+      match: ~r/^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+.[a-zA-Z0-9-.]+$/
     ]
   end
 
@@ -453,7 +453,7 @@ end
 | [`read_action`](#relationships-has_one-read_action){: #relationships-has_one-read_action } | `atom` |  | The read action on the destination resource to use when loading data and filtering. |
 | [`domain`](#relationships-has_one-domain){: #relationships-has_one-domain } | `atom` |  | The domain module to use when working with the related entity. |
 | [`filterable?`](#relationships-has_one-filterable?){: #relationships-has_one-filterable? } | `boolean` | `true` | If set to `false`, the relationship will not be usable in filters. |
-| [`sortable?`](#relationships-has_one-sortable?){: #relationships-has_one-sortable? } | `boolean` | `true` | If set to `false`, the relationship will not be usable in filters. |
+| [`sortable?`](#relationships-has_one-sortable?){: #relationships-has_one-sortable? } | `boolean` | `true` | If set to `false`, the relationship will not be usable in sorts. |
 | [`sort`](#relationships-has_one-sort){: #relationships-has_one-sort } | `any` |  | A sort statement to be applied when loading the relationship. |
 | [`default_sort`](#relationships-has_one-default_sort){: #relationships-has_one-default_sort } | `any` |  | A default sort statement to be applied when loading the relationship. |
 | [`could_be_related_at_creation?`](#relationships-has_one-could_be_related_at_creation?){: #relationships-has_one-could_be_related_at_creation? } | `boolean` | `false` | Whether or not related values may exist for this relationship at creation. |
@@ -554,7 +554,7 @@ end
 | [`read_action`](#relationships-has_many-read_action){: #relationships-has_many-read_action } | `atom` |  | The read action on the destination resource to use when loading data and filtering. |
 | [`domain`](#relationships-has_many-domain){: #relationships-has_many-domain } | `atom` |  | The domain module to use when working with the related entity. |
 | [`filterable?`](#relationships-has_many-filterable?){: #relationships-has_many-filterable? } | `boolean` | `true` | If set to `false`, the relationship will not be usable in filters. |
-| [`sortable?`](#relationships-has_many-sortable?){: #relationships-has_many-sortable? } | `boolean` | `true` | If set to `false`, the relationship will not be usable in filters. |
+| [`sortable?`](#relationships-has_many-sortable?){: #relationships-has_many-sortable? } | `boolean` | `true` | If set to `false`, the relationship will not be usable in sorts. |
 | [`sort`](#relationships-has_many-sort){: #relationships-has_many-sort } | `any` |  | A sort statement to be applied when loading the relationship. |
 | [`default_sort`](#relationships-has_many-default_sort){: #relationships-has_many-default_sort } | `any` |  | A default sort statement to be applied when loading the relationship. |
 | [`could_be_related_at_creation?`](#relationships-has_many-could_be_related_at_creation?){: #relationships-has_many-could_be_related_at_creation? } | `boolean` | `false` | Whether or not related values may exist for this relationship at creation. |
@@ -665,7 +665,7 @@ belongs_to :word, Word, primary_key?: true, allow_nil?: false
 | [`read_action`](#relationships-many_to_many-read_action){: #relationships-many_to_many-read_action } | `atom` |  | The read action on the destination resource to use when loading data and filtering. |
 | [`domain`](#relationships-many_to_many-domain){: #relationships-many_to_many-domain } | `atom` |  | The domain module to use when working with the related entity. |
 | [`filterable?`](#relationships-many_to_many-filterable?){: #relationships-many_to_many-filterable? } | `boolean` | `true` | If set to `false`, the relationship will not be usable in filters. |
-| [`sortable?`](#relationships-many_to_many-sortable?){: #relationships-many_to_many-sortable? } | `boolean` | `true` | If set to `false`, the relationship will not be usable in filters. |
+| [`sortable?`](#relationships-many_to_many-sortable?){: #relationships-many_to_many-sortable? } | `boolean` | `true` | If set to `false`, the relationship will not be usable in sorts. |
 | [`sort`](#relationships-many_to_many-sort){: #relationships-many_to_many-sort } | `any` |  | A sort statement to be applied when loading the relationship. |
 | [`default_sort`](#relationships-many_to_many-default_sort){: #relationships-many_to_many-default_sort } | `any` |  | A default sort statement to be applied when loading the relationship. |
 | [`could_be_related_at_creation?`](#relationships-many_to_many-could_be_related_at_creation?){: #relationships-many_to_many-could_be_related_at_creation? } | `boolean` | `false` | Whether or not related values may exist for this relationship at creation. |
@@ -771,7 +771,7 @@ end
 | [`read_action`](#relationships-belongs_to-read_action){: #relationships-belongs_to-read_action } | `atom` |  | The read action on the destination resource to use when loading data and filtering. |
 | [`domain`](#relationships-belongs_to-domain){: #relationships-belongs_to-domain } | `atom` |  | The domain module to use when working with the related entity. |
 | [`filterable?`](#relationships-belongs_to-filterable?){: #relationships-belongs_to-filterable? } | `boolean` | `true` | If set to `false`, the relationship will not be usable in filters. |
-| [`sortable?`](#relationships-belongs_to-sortable?){: #relationships-belongs_to-sortable? } | `boolean` | `true` | If set to `false`, the relationship will not be usable in filters. |
+| [`sortable?`](#relationships-belongs_to-sortable?){: #relationships-belongs_to-sortable? } | `boolean` | `true` | If set to `false`, the relationship will not be usable in sorts. |
 | [`sort`](#relationships-belongs_to-sort){: #relationships-belongs_to-sort } | `any` |  | A sort statement to be applied when loading the relationship. |
 | [`default_sort`](#relationships-belongs_to-default_sort){: #relationships-belongs_to-default_sort } | `any` |  | A default sort statement to be applied when loading the relationship. |
 | [`violation_message`](#relationships-belongs_to-violation_message){: #relationships-belongs_to-violation_message } | `String.t` |  | A message to show if there is a conflict with this relationship in the database on destroy. |
@@ -837,6 +837,8 @@ multiple actions of each type in a large application.
 ### Nested DSLs
  * [action](#actions-action)
    * argument
+   * prepare
+   * validate
  * [create](#actions-create)
    * change
    * validate
@@ -845,6 +847,7 @@ multiple actions of each type in a large application.
  * [read](#actions-read)
    * argument
    * prepare
+   * validate
    * pagination
    * metadata
    * filter
@@ -916,6 +919,8 @@ For calling this action, see the `Ash.Domain` documentation.
 
 ### Nested DSLs
  * [argument](#actions-action-argument)
+ * [prepare](#actions-action-prepare)
+ * [validate](#actions-action-validate)
 
 
 ### Examples
@@ -995,6 +1000,93 @@ argument :password_confirmation, :string
 ### Introspection
 
 Target: `Ash.Resource.Actions.Argument`
+
+### actions.action.prepare
+```elixir
+prepare preparation
+```
+
+
+Declares a preparation, which can be used to prepare a query for a read action.
+
+
+
+
+### Examples
+```
+prepare build(sort: [:foo, :bar])
+
+```
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`preparation`](#actions-action-prepare-preparation){: #actions-action-prepare-preparation .spark-required} | `(any, any -> any) \| module` |  | The module and options for a preparation. Also accepts functions take the query and the context. |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`on`](#actions-action-prepare-on){: #actions-action-prepare-on } | `:read \| :action \| list(:read \| :action)` | `[:read]` | The action types the preparation should run on. By default, preparations only run on read actions. Use `:action` to run on generic actions. |
+| [`where`](#actions-action-prepare-where){: #actions-action-prepare-where } | `(any, any -> any) \| module \| list((any, any -> any) \| module)` | `[]` | Validations that should pass in order for this preparation to apply. Any of these validations failing will result in this preparation being ignored. |
+| [`only_when_valid?`](#actions-action-prepare-only_when_valid?){: #actions-action-prepare-only_when_valid? } | `boolean` | `false` | If the preparation should only run on valid queries. |
+
+
+
+
+
+### Introspection
+
+Target: `Ash.Resource.Preparation`
+
+### actions.action.validate
+```elixir
+validate validation
+```
+
+
+Declares a validation for creates and updates.
+
+See `Ash.Resource.Validation.Builtins` or `Ash.Resource.Validation` for more.
+
+
+
+
+### Examples
+```
+validate {Mod, [foo: :bar]}
+```
+
+```
+validate present([:first_name, :last_name], at_least: 1)
+```
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`validation`](#actions-action-validate-validation){: #actions-action-validate-validation .spark-required} | `(any, any -> any) \| module` |  | The module (or module and opts) that implements the `Ash.Resource.Validation` behaviour. Also accepts a function that receives the changeset and its context. |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`where`](#actions-action-validate-where){: #actions-action-validate-where } | `(any, any -> any) \| module \| list((any, any -> any) \| module)` | `[]` | Validations that should pass in order for this validation to apply. Any of these validations failing will result in this validation being ignored. |
+| [`only_when_valid?`](#actions-action-validate-only_when_valid?){: #actions-action-validate-only_when_valid? } | `boolean` | `false` | If the validation should only run on valid changesets. Useful for expensive validations or validations that depend on valid data. |
+| [`message`](#actions-action-validate-message){: #actions-action-validate-message } | `String.t` |  | If provided, overrides any message set by the validation error |
+| [`description`](#actions-action-validate-description){: #actions-action-validate-description } | `String.t` |  | An optional description for the validation |
+| [`before_action?`](#actions-action-validate-before_action?){: #actions-action-validate-before_action? } | `boolean` | `false` | If set to `true`, the validation will be run in a before_action hook |
+
+
+
+
+
+### Introspection
+
+Target: `Ash.Resource.Validation`
 
 
 
@@ -1136,7 +1228,7 @@ validate changing(:email)
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`where`](#actions-create-validate-where){: #actions-create-validate-where } | `(any, any -> any) \| module \| list((any, any -> any) \| module)` | `[]` | Validations that should pass in order for this validation to apply. Any of these validations failing will result in this validation being ignored. |
-| [`only_when_valid?`](#actions-create-validate-only_when_valid?){: #actions-create-validate-only_when_valid? } | `boolean` | `false` | If the validation should only run on valid changes. Useful for expensive validations or validations that depend on valid data. |
+| [`only_when_valid?`](#actions-create-validate-only_when_valid?){: #actions-create-validate-only_when_valid? } | `boolean` | `false` | If the validation should only run on valid changesets. Useful for expensive validations or validations that depend on valid data. |
 | [`message`](#actions-create-validate-message){: #actions-create-validate-message } | `String.t` |  | If provided, overrides any message set by the validation error |
 | [`description`](#actions-create-validate-description){: #actions-create-validate-description } | `String.t` |  | An optional description for the validation |
 | [`before_action?`](#actions-create-validate-before_action?){: #actions-create-validate-before_action? } | `boolean` | `false` | If set to `true`, the validation will be run in a before_action hook |
@@ -1260,6 +1352,7 @@ Declares a `read` action. For calling this action, see the `Ash.Domain` document
 ### Nested DSLs
  * [argument](#actions-read-argument)
  * [prepare](#actions-read-prepare)
+ * [validate](#actions-read-validate)
  * [pagination](#actions-read-pagination)
  * [metadata](#actions-read-metadata)
  * [filter](#actions-read-filter)
@@ -1289,7 +1382,8 @@ end
 | [`modify_query`](#actions-read-modify_query){: #actions-read-modify_query } | `mfa \| (any, any -> any)` |  | Allows direct manipulation of the data layer query via an MFA. The ash query and the data layer query will be provided as additional arguments. The result must be `{:ok, new_data_layer_query} \| {:error, error}`. |
 | [`get_by`](#actions-read-get_by){: #actions-read-get_by } | `atom \| list(atom)` |  | A helper to automatically generate a "get by X" action. Sets `get?` to true, add args for each of the specified fields, and adds a filter for each of the arguments. |
 | [`timeout`](#actions-read-timeout){: #actions-read-timeout } | `pos_integer` |  | The maximum amount of time, in milliseconds, that the action is allowed to run for. Ignored if the data layer doesn't support transactions *and* async is disabled. |
-| [`multitenancy`](#actions-read-multitenancy){: #actions-read-multitenancy } | `:enforce \| :allow_global \| :bypass` | `:enforce` | This setting defines how this action handles multitenancy. `:enforce` requires a tenant to be set (the default behavior), `:allow_global` allows using this action both with and without a tenant, `:bypass` completely ignores the tenant even if it's set. This is useful to change the behaviour of selected read action without the need of marking the whole resource with `global? true`. |
+| [`multitenancy`](#actions-read-multitenancy){: #actions-read-multitenancy } | `:enforce \| :allow_global \| :bypass \| :bypass_all` | `:enforce` | This setting defines how this action handles multitenancy. `:enforce` requires a tenant to be set (the default behavior), `:allow_global` allows using this action both with and without a tenant, `:bypass` completely ignores the tenant even if it's set, `:bypass_all` like `:bypass` but also bypasses the tenancy requirement for the nested resources. This is useful to change the behaviour of selected read action without the need of marking the whole resource with `global? true`. |
+| [`skip_global_validations?`](#actions-read-skip_global_validations?){: #actions-read-skip_global_validations? } | `boolean` | `false` | If true, global validations will be skipped. Useful for manual actions. |
 | [`primary?`](#actions-read-primary?){: #actions-read-primary? } | `boolean` | `false` | Whether or not this action should be used when no action is specified by the caller. |
 | [`description`](#actions-read-description){: #actions-read-description } | `String.t` |  | An optional description for the action |
 | [`transaction?`](#actions-read-transaction?){: #actions-read-transaction? } | `boolean` |  | Whether or not the action should be run in transactions. Reads default to false, while create/update/destroy actions default to `true`. |
@@ -1364,7 +1458,13 @@ prepare build(sort: [:foo, :bar])
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`preparation`](#actions-read-prepare-preparation){: #actions-read-prepare-preparation .spark-required} | `(any, any -> any) \| module` |  | The module and options for a preparation. Also accepts functions take the query and the context. |
+### Options
 
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`on`](#actions-read-prepare-on){: #actions-read-prepare-on } | `:read \| :action \| list(:read \| :action)` | `[:read]` | The action types the preparation should run on. By default, preparations only run on read actions. Use `:action` to run on generic actions. |
+| [`where`](#actions-read-prepare-where){: #actions-read-prepare-where } | `(any, any -> any) \| module \| list((any, any -> any) \| module)` | `[]` | Validations that should pass in order for this preparation to apply. Any of these validations failing will result in this preparation being ignored. |
+| [`only_when_valid?`](#actions-read-prepare-only_when_valid?){: #actions-read-prepare-only_when_valid? } | `boolean` | `false` | If the preparation should only run on valid queries. |
 
 
 
@@ -1373,6 +1473,53 @@ prepare build(sort: [:foo, :bar])
 ### Introspection
 
 Target: `Ash.Resource.Preparation`
+
+### actions.read.validate
+```elixir
+validate validation
+```
+
+
+Declares a validation for creates and updates.
+
+See `Ash.Resource.Validation.Builtins` or `Ash.Resource.Validation` for more.
+
+
+
+
+### Examples
+```
+validate {Mod, [foo: :bar]}
+```
+
+```
+validate present([:first_name, :last_name], at_least: 1)
+```
+
+
+
+### Arguments
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`validation`](#actions-read-validate-validation){: #actions-read-validate-validation .spark-required} | `(any, any -> any) \| module` |  | The module (or module and opts) that implements the `Ash.Resource.Validation` behaviour. Also accepts a function that receives the changeset and its context. |
+### Options
+
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`where`](#actions-read-validate-where){: #actions-read-validate-where } | `(any, any -> any) \| module \| list((any, any -> any) \| module)` | `[]` | Validations that should pass in order for this validation to apply. Any of these validations failing will result in this validation being ignored. |
+| [`only_when_valid?`](#actions-read-validate-only_when_valid?){: #actions-read-validate-only_when_valid? } | `boolean` | `false` | If the validation should only run on valid changesets. Useful for expensive validations or validations that depend on valid data. |
+| [`message`](#actions-read-validate-message){: #actions-read-validate-message } | `String.t` |  | If provided, overrides any message set by the validation error |
+| [`description`](#actions-read-validate-description){: #actions-read-validate-description } | `String.t` |  | An optional description for the validation |
+| [`before_action?`](#actions-read-validate-before_action?){: #actions-read-validate-before_action? } | `boolean` | `false` | If set to `true`, the validation will be run in a before_action hook |
+
+
+
+
+
+### Introspection
+
+Target: `Ash.Resource.Validation`
 
 ### actions.read.pagination
 
@@ -1622,7 +1769,7 @@ validate changing(:email)
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`where`](#actions-update-validate-where){: #actions-update-validate-where } | `(any, any -> any) \| module \| list((any, any -> any) \| module)` | `[]` | Validations that should pass in order for this validation to apply. Any of these validations failing will result in this validation being ignored. |
-| [`only_when_valid?`](#actions-update-validate-only_when_valid?){: #actions-update-validate-only_when_valid? } | `boolean` | `false` | If the validation should only run on valid changes. Useful for expensive validations or validations that depend on valid data. |
+| [`only_when_valid?`](#actions-update-validate-only_when_valid?){: #actions-update-validate-only_when_valid? } | `boolean` | `false` | If the validation should only run on valid changesets. Useful for expensive validations or validations that depend on valid data. |
 | [`message`](#actions-update-validate-message){: #actions-update-validate-message } | `String.t` |  | If provided, overrides any message set by the validation error |
 | [`description`](#actions-update-validate-description){: #actions-update-validate-description } | `String.t` |  | An optional description for the validation |
 | [`before_action?`](#actions-update-validate-before_action?){: #actions-update-validate-before_action? } | `boolean` | `false` | If set to `true`, the validation will be run in a before_action hook |
@@ -1741,6 +1888,8 @@ destroy name
 
 
 Declares a `destroy` action. For calling this action, see the `Ash.Domain` documentation.
+
+See `Ash.Resource.Change.Builtins.cascade_destroy/2` for cascading destroy operations.
 
 
 ### Nested DSLs
@@ -1866,7 +2015,7 @@ validate changing(:email)
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`where`](#actions-destroy-validate-where){: #actions-destroy-validate-where } | `(any, any -> any) \| module \| list((any, any -> any) \| module)` | `[]` | Validations that should pass in order for this validation to apply. Any of these validations failing will result in this validation being ignored. |
-| [`only_when_valid?`](#actions-destroy-validate-only_when_valid?){: #actions-destroy-validate-only_when_valid? } | `boolean` | `false` | If the validation should only run on valid changes. Useful for expensive validations or validations that depend on valid data. |
+| [`only_when_valid?`](#actions-destroy-validate-only_when_valid?){: #actions-destroy-validate-only_when_valid? } | `boolean` | `false` | If the validation should only run on valid changesets. Useful for expensive validations or validations that depend on valid data. |
 | [`message`](#actions-destroy-validate-message){: #actions-destroy-validate-message } | `String.t` |  | If provided, overrides any message set by the validation error |
 | [`description`](#actions-destroy-validate-description){: #actions-destroy-validate-description } | `String.t` |  | An optional description for the validation |
 | [`before_action?`](#actions-destroy-validate-before_action?){: #actions-destroy-validate-before_action? } | `boolean` | `false` | If set to `true`, the validation will be run in a before_action hook |
@@ -2053,7 +2202,7 @@ define :get_user_by_id, action: :get_by_id, args: [:id], get?: true
 | [`get?`](#code_interface-define-get?){: #code_interface-define-get? } | `boolean` | `false` | Expects to only receive a single result from a read action or a bulk update/destroy, and returns a single result instead of a list. Sets `require_reference?` to false automatically. |
 | [`get_by`](#code_interface-define-get_by){: #code_interface-define-get_by } | `atom \| list(atom)` |  | Takes a list of fields and adds those fields as arguments, which will then be used to filter. Sets `get?` to true and `require_reference?` to false automatically. Adds filters for read, update and destroy actions, replacing the `record` first argument. |
 | [`get_by_identity`](#code_interface-define-get_by_identity){: #code_interface-define-get_by_identity } | `atom` |  | Takes an identity, gets its field list, and performs the same logic as `get_by` with those fields. Adds filters for read, update and destroy actions, replacing the `record` first argument. |
-| [`default_options`](#code_interface-define-default_options){: #code_interface-define-default_options } | `keyword` | `[]` | Default options to be merged with client-provided options. These can override domain or action defaults. `:load`, `:bulk_options`, and `:page` options will be deep merged. |
+| [`default_options`](#code_interface-define-default_options){: #code_interface-define-default_options } | `keyword \| (-> any)` | `[]` | Default options to be merged with client-provided options. These can override domain or action defaults. `:load`, `:bulk_options`, and `:page` options will be deep merged. Can be a keyword list or a zero-arity function that returns a keyword list. |
 
 
 ### code_interface.define.custom_input
@@ -2393,7 +2542,7 @@ identity :full_name, [:first_name, :last_name]
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`where`](#identities-identity-where){: #identities-identity-where } | `any` |  | A filter that expresses only matching records are unique on the provided keys. Ignored on embedded resources. |
-| [`nils_distinct?`](#identities-identity-nils_distinct?){: #identities-identity-nils_distinct? } | `boolean` | `true` | Whether or not `nil` values are considered always distinct from eachother. `nil` values won't conflict with eachother unless you set this option to `false`. |
+| [`nils_distinct?`](#identities-identity-nils_distinct?){: #identities-identity-nils_distinct? } | `boolean` | `true` | Whether or not `nil` values are considered always distinct from each other. `nil` values won't conflict with each other unless you set this option to `false`. |
 | [`eager_check?`](#identities-identity-eager_check?){: #identities-identity-eager_check? } | `boolean` | `false` | Whether or not this identity is validated to be unique at validation time. |
 | [`eager_check_with`](#identities-identity-eager_check_with){: #identities-identity-eager_check_with } | `module` |  | Validates that the unique identity provided is unique at validation time, outside of any transactions, using the domain module provided. Will default to resource's domain. |
 | [`pre_check?`](#identities-identity-pre_check?){: #identities-identity-pre_check? } | `boolean` | `false` | Whether or not this identity is validated to be unique in a before_action hook. |
@@ -2530,7 +2679,13 @@ prepare build(sort: [:foo, :bar])
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`preparation`](#preparations-prepare-preparation){: #preparations-prepare-preparation .spark-required} | `(any, any -> any) \| module` |  | The module and options for a preparation. Also accepts functions take the query and the context. |
+### Options
 
+| Name | Type | Default | Docs |
+|------|------|---------|------|
+| [`on`](#preparations-prepare-on){: #preparations-prepare-on } | `:read \| :action \| list(:read \| :action)` | `[:read]` | The action types the preparation should run on. By default, preparations only run on read actions. Use `:action` to run on generic actions. |
+| [`where`](#preparations-prepare-where){: #preparations-prepare-where } | `(any, any -> any) \| module \| list((any, any -> any) \| module)` | `[]` | Validations that should pass in order for this preparation to apply. Any of these validations failing will result in this preparation being ignored. |
+| [`only_when_valid?`](#preparations-prepare-only_when_valid?){: #preparations-prepare-only_when_valid? } | `boolean` | `false` | If the preparation should only run on valid queries. |
 
 
 
@@ -2555,7 +2710,7 @@ Declare validations prior to performing actions against the resource
 ```
 validations do
   validate {Mod, [foo: :bar]}
-  validate at_least_one_of_present([:first_name, :last_name])
+  validate present([:first_name, :last_name], at_least: 1)
 end
 
 ```
@@ -2582,7 +2737,7 @@ validate {Mod, [foo: :bar]}
 ```
 
 ```
-validate at_least_one_of_present([:first_name, :last_name])
+validate present([:first_name, :last_name], at_least: 1)
 ```
 
 
@@ -2597,8 +2752,8 @@ validate at_least_one_of_present([:first_name, :last_name])
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`where`](#validations-validate-where){: #validations-validate-where } | `(any, any -> any) \| module \| list((any, any -> any) \| module)` | `[]` | Validations that should pass in order for this validation to apply. Any of these validations failing will result in this validation being ignored. |
-| [`on`](#validations-validate-on){: #validations-validate-on } | `:create \| :update \| :destroy \| list(:create \| :update \| :destroy)` | `[:create, :update]` | The action types the validation should run on. Many validations don't make sense in the context of deletion, so by default it is not included. |
-| [`only_when_valid?`](#validations-validate-only_when_valid?){: #validations-validate-only_when_valid? } | `boolean` | `false` | If the validation should only run on valid changes. Useful for expensive validations or validations that depend on valid data. |
+| [`on`](#validations-validate-on){: #validations-validate-on } | `:create \| :update \| :destroy \| :read \| :action \| list(:create \| :update \| :destroy \| :read \| :action)` | `[:create, :update]` | The action types the validation should run on. Many validations don't make sense in the context of destroy, read, or generic actions, so by default they are not included. |
+| [`only_when_valid?`](#validations-validate-only_when_valid?){: #validations-validate-only_when_valid? } | `boolean` | `false` | If the validation should only run on valid changesets. Useful for expensive validations or validations that depend on valid data. |
 | [`message`](#validations-validate-message){: #validations-validate-message } | `String.t` |  | If provided, overrides any message set by the validation error |
 | [`description`](#validations-validate-description){: #validations-validate-description } | `String.t` |  | An optional description for the validation |
 | [`before_action?`](#validations-validate-before_action?){: #validations-validate-before_action? } | `boolean` | `false` | If set to `true`, the validation will be run in a before_action hook |
@@ -2668,6 +2823,8 @@ Declares a named count aggregate on the resource
 
 Supports `filter`, but not `sort` (because that wouldn't affect the count)
 
+Can aggregate over relationships using a relationship path, or directly over another resource.
+
 See the [aggregates guide](/documentation/topics/resources/aggregates.md) for more.
 
 
@@ -2683,6 +2840,13 @@ end
 
 ```
 
+```
+count :matching_profiles_count, Profile do
+  filter expr(name == parent(name))
+end
+
+```
+
 
 
 ### Arguments
@@ -2690,7 +2854,7 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`name`](#aggregates-count-name){: #aggregates-count-name .spark-required} | `atom` |  | The field to place the aggregate in |
-| [`relationship_path`](#aggregates-count-relationship_path){: #aggregates-count-relationship_path .spark-required} | `atom \| list(atom)` |  | The relationship or relationship path to use for the aggregate |
+| [`relationship_path`](#aggregates-count-relationship_path){: #aggregates-count-relationship_path .spark-required} | `list(atom) \| atom` |  | The relationship or relationship path to use for the aggregate, or a resource module for resource-based aggregates |
 ### Options
 
 | Name | Type | Default | Docs |
@@ -2780,7 +2944,7 @@ exists :has_ticket, :assigned_tickets
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`name`](#aggregates-exists-name){: #aggregates-exists-name .spark-required} | `atom` |  | The field to place the aggregate in |
-| [`relationship_path`](#aggregates-exists-relationship_path){: #aggregates-exists-relationship_path .spark-required} | `atom \| list(atom)` |  | The relationship or relationship path to use for the aggregate |
+| [`relationship_path`](#aggregates-exists-relationship_path){: #aggregates-exists-relationship_path .spark-required} | `list(atom) \| atom` |  | The relationship or relationship path to use for the aggregate, or a resource module for resource-based aggregates |
 ### Options
 
 | Name | Type | Default | Docs |
@@ -2872,7 +3036,7 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`name`](#aggregates-first-name){: #aggregates-first-name .spark-required} | `atom` |  | The field to place the aggregate in |
-| [`relationship_path`](#aggregates-first-relationship_path){: #aggregates-first-relationship_path .spark-required} | `atom \| list(atom)` |  | The relationship or relationship path to use for the aggregate |
+| [`relationship_path`](#aggregates-first-relationship_path){: #aggregates-first-relationship_path .spark-required} | `list(atom) \| atom` |  | The relationship or relationship path to use for the aggregate, or a resource module for resource-based aggregates |
 | [`field`](#aggregates-first-field){: #aggregates-first-field } | `atom` |  | The field to aggregate. Defaults to the first field in the primary key of the resource |
 ### Options
 
@@ -2965,7 +3129,7 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`name`](#aggregates-sum-name){: #aggregates-sum-name .spark-required} | `atom` |  | The field to place the aggregate in |
-| [`relationship_path`](#aggregates-sum-relationship_path){: #aggregates-sum-relationship_path .spark-required} | `atom \| list(atom)` |  | The relationship or relationship path to use for the aggregate |
+| [`relationship_path`](#aggregates-sum-relationship_path){: #aggregates-sum-relationship_path .spark-required} | `list(atom) \| atom` |  | The relationship or relationship path to use for the aggregate, or a resource module for resource-based aggregates |
 | [`field`](#aggregates-sum-field){: #aggregates-sum-field } | `atom` |  | The field to aggregate. Defaults to the first field in the primary key of the resource |
 ### Options
 
@@ -3057,7 +3221,7 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`name`](#aggregates-list-name){: #aggregates-list-name .spark-required} | `atom` |  | The field to place the aggregate in |
-| [`relationship_path`](#aggregates-list-relationship_path){: #aggregates-list-relationship_path .spark-required} | `atom \| list(atom)` |  | The relationship or relationship path to use for the aggregate |
+| [`relationship_path`](#aggregates-list-relationship_path){: #aggregates-list-relationship_path .spark-required} | `list(atom) \| atom` |  | The relationship or relationship path to use for the aggregate, or a resource module for resource-based aggregates |
 | [`field`](#aggregates-list-field){: #aggregates-list-field } | `atom` |  | The field to aggregate. Defaults to the first field in the primary key of the resource |
 ### Options
 
@@ -3151,7 +3315,7 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`name`](#aggregates-max-name){: #aggregates-max-name .spark-required} | `atom` |  | The field to place the aggregate in |
-| [`relationship_path`](#aggregates-max-relationship_path){: #aggregates-max-relationship_path .spark-required} | `atom \| list(atom)` |  | The relationship or relationship path to use for the aggregate |
+| [`relationship_path`](#aggregates-max-relationship_path){: #aggregates-max-relationship_path .spark-required} | `list(atom) \| atom` |  | The relationship or relationship path to use for the aggregate, or a resource module for resource-based aggregates |
 | [`field`](#aggregates-max-field){: #aggregates-max-field } | `atom` |  | The field to aggregate. Defaults to the first field in the primary key of the resource |
 ### Options
 
@@ -3242,7 +3406,7 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`name`](#aggregates-min-name){: #aggregates-min-name .spark-required} | `atom` |  | The field to place the aggregate in |
-| [`relationship_path`](#aggregates-min-relationship_path){: #aggregates-min-relationship_path .spark-required} | `atom \| list(atom)` |  | The relationship or relationship path to use for the aggregate |
+| [`relationship_path`](#aggregates-min-relationship_path){: #aggregates-min-relationship_path .spark-required} | `list(atom) \| atom` |  | The relationship or relationship path to use for the aggregate, or a resource module for resource-based aggregates |
 | [`field`](#aggregates-min-field){: #aggregates-min-field } | `atom` |  | The field to aggregate. Defaults to the first field in the primary key of the resource |
 ### Options
 
@@ -3333,7 +3497,7 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`name`](#aggregates-avg-name){: #aggregates-avg-name .spark-required} | `atom` |  | The field to place the aggregate in |
-| [`relationship_path`](#aggregates-avg-relationship_path){: #aggregates-avg-relationship_path .spark-required} | `atom \| list(atom)` |  | The relationship or relationship path to use for the aggregate |
+| [`relationship_path`](#aggregates-avg-relationship_path){: #aggregates-avg-relationship_path .spark-required} | `list(atom) \| atom` |  | The relationship or relationship path to use for the aggregate, or a resource module for resource-based aggregates |
 | [`field`](#aggregates-avg-field){: #aggregates-avg-field } | `atom` |  | The field to aggregate. Defaults to the first field in the primary key of the resource |
 ### Options
 
@@ -3426,7 +3590,7 @@ end
 | Name | Type | Default | Docs |
 |------|------|---------|------|
 | [`name`](#aggregates-custom-name){: #aggregates-custom-name .spark-required} | `atom` |  | The field to place the aggregate in |
-| [`relationship_path`](#aggregates-custom-relationship_path){: #aggregates-custom-relationship_path .spark-required} | `atom \| list(atom)` |  | The relationship or relationship path to use for the aggregate |
+| [`relationship_path`](#aggregates-custom-relationship_path){: #aggregates-custom-relationship_path .spark-required} | `list(atom) \| atom` |  | The relationship or relationship path to use for the aggregate, or a resource module for resource-based aggregates |
 | [`type`](#aggregates-custom-type){: #aggregates-custom-type .spark-required} | `module` |  | The type of the value returned by the aggregate |
 ### Options
 

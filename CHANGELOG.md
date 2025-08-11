@@ -2,6 +2,382 @@
 
 <!-- changelog -->
 
+## [v3.5.34](https://github.com/ash-project/ash/compare/v3.5.33...v3.5.34) (2025-08-07)
+
+
+
+
+### Bug Fixes:
+
+* avoid String.to_atom by pre-computing mixed argument name MapSet (#2262) by James Harton
+
+* Accept nil input for maps and TypedStructs (#2257) by [@FugiTech](https://github.com/FugiTech)
+
+* pass actor: nil to ash.get in get_and_lock_for_update (#2256) by Jesse Williams
+
+* add default impl for rewrite/3 & get_rewrites/4 for Ash.Type. (#2251) by [@Torkan](https://github.com/Torkan)
+
+* filter out invalid changeset, before running the bulk before transactions (#2249) by [@barnabasJ](https://github.com/barnabasJ)
+
+* minor tweaks to usage rules (#2246) by albinkc
+
+* handle updates on union types containing arrays  (#2237) by Rutgerdj
+
+### Improvements:
+
+* Support through for many to many relationship gen (#2233) by Kenneth Kostrešević
+
+* Update usage-rules.md to include Polymorphic Relationships (#2211) by Gonzalo Muñoz
+
+* filter expression verifier (#2243) by Kenneth Kostrešević
+
+* Introduce extension introspection functions on Ash.*.Info (#2239) by Jonatan Männchen
+
+## [v3.5.33](https://github.com/ash-project/ash/compare/v3.5.32...v3.5.33) (2025-07-29)
+
+
+
+
+### Bug Fixes:
+
+* handle `nil` values properly in atomic changing validations by [@zachdaniel](https://github.com/zachdaniel)
+
+* Application ER Mermaid Diagram (#2231) by [@maennchen](https://github.com/maennchen)
+
+* clear `nil` options in typed struct to constraints process by [@zachdaniel](https://github.com/zachdaniel)
+
+* allow Ash @global_opts authorize? to accept boolean or nil (#2225) by [@chazwatkins](https://github.com/chazwatkins)
+
+* Don't require permissions to read actor on non-atomic `relate_actor` (#2223) by [@chazwatkins](https://github.com/chazwatkins)
+
+* call underlying stream run instead of public interface by [@zachdaniel](https://github.com/zachdaniel)
+
+### Improvements:
+
+* `get_by_id` typo fix in usage rules (#2230) by albinkc
+
+* Add array modifier to `ash.gen.resource` (#2228) by Kenneth Kostrešević
+
+* Add prepend? opt to hooks and Ash.Subject transaction hooks (#2221) by [@chazwatkins](https://github.com/chazwatkins)
+
+* hooks: Add transaction hooks to Ash.Subject by [@chazwatkins](https://github.com/chazwatkins)
+
+* Ash.Subject delegation and improvements by [@chazwatkins](https://github.com/chazwatkins)
+
+* add `log?` option to `can` functions by [@zachdaniel](https://github.com/zachdaniel)
+
+* add transaction hooks for read actions (#2219) by ChristianAlexander
+
+## [v3.5.32](https://github.com/ash-project/ash/compare/v3.5.31...v3.5.32) (2025-07-23)
+
+
+
+
+### Bug Fixes:
+
+* ensure that exists "at_path" is returned as a relationship path by [@zachdaniel](https://github.com/zachdaniel)
+
+### Improvements:
+
+* add before/after/around transaction hooks to generic actions (#2218) by ChristianAlexander
+
+## [v3.5.31](https://github.com/ash-project/ash/compare/v3.5.30...v3.5.31) (2025-07-22)
+
+
+
+
+### Bug Fixes:
+
+* Catch invalid load (#2213) by Kenneth Kostrešević
+
+### Improvements:
+
+* Add Ash.Subject to abstract Changeset, Query, ActionInput common functions (#2212) by [@chazwatkins](https://github.com/chazwatkins)
+
+* support validations, preparations on generic actions by [@zachdaniel](https://github.com/zachdaniel)
+
+* add before/after action hooks to generic actions by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.30](https://github.com/ash-project/ash/compare/v3.5.29...v3.5.30) (2025-07-18)
+
+
+
+
+### Bug Fixes:
+
+* handle new return value from `kind_of_thing` in gen.resource by [@zachdaniel](https://github.com/zachdaniel)
+
+### Improvements:
+
+* support global validations being applied to reads by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.29](https://github.com/ash-project/ash/compare/v3.5.28...v3.5.29) (2025-07-18)
+
+
+
+
+### Bug Fixes:
+
+* properly return `:error` when unable to determine type of module by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.28](https://github.com/ash-project/ash/compare/v3.5.27...v3.5.28) (2025-07-17)
+
+
+
+
+### Bug Fixes:
+
+* accept composite types in typed struct types by [@zachdaniel](https://github.com/zachdaniel)
+
+* keep descriptions from typed struct DSL by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.27](https://github.com/ash-project/ash/compare/v3.5.26...v3.5.27) (2025-07-17)
+
+
+
+
+### Bug Fixes:
+
+* properly merge contexts from scope and opts by [@zachdaniel](https://github.com/zachdaniel)
+
+* ensure that `modify_query` is honored on aggregates by [@zachdaniel](https://github.com/zachdaniel)
+
+* read action: Tenant from before_action will survive in metadata (#2189) by [@serpent213](https://github.com/serpent213)
+
+* set action on aggregate queries by [@zachdaniel](https://github.com/zachdaniel)
+
+* cascade change action selection (#2193) by [@barnabasJ](https://github.com/barnabasJ)
+
+* try atomic_upgrade_with before falling back to primary action in cascade changes (#2191) by [@barnabasJ](https://github.com/barnabasJ)
+
+* ensure `cast_input` uses `new` callback on typed structs by [@zachdaniel](https://github.com/zachdaniel)
+
+* use correct options in code interfaces in usage-rules.md by [@zachdaniel](https://github.com/zachdaniel)
+
+* support single atoms in `sort_input` by [@zachdaniel](https://github.com/zachdaniel)
+
+### Improvements:
+
+* support where clauses on preparations by [@zachdaniel](https://github.com/zachdaniel)
+
+* support `Ash.Query` for most builtin validations by [@zachdaniel](https://github.com/zachdaniel)
+
+* support validations on read actions by [@zachdaniel](https://github.com/zachdaniel)
+
+* introduce `Ash.TypedStruct` as a simpler struct type by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.26](https://github.com/ash-project/ash/compare/v3.5.25...v3.5.26) (2025-07-09)
+
+
+
+
+### Bug Fixes:
+
+* don't dump values to native when building changesets by [@zachdaniel](https://github.com/zachdaniel)
+
+* ensure that async limiter is properly cleared by [@zachdaniel](https://github.com/zachdaniel)
+
+* when comparing embedded attributes, ignore metadata keys by [@zachdaniel](https://github.com/zachdaniel)
+
+* clear async limiter on pagination query by [@zachdaniel](https://github.com/zachdaniel)
+
+### Improvements:
+
+* set `show_policy_breakdowns?` to `true` in dev/test by default by [@zachdaniel](https://github.com/zachdaniel)
+
+* make `mix ash.gen.resource` merge existing resources by [@zachdaniel](https://github.com/zachdaniel)
+
+* allow code_interface default_options to accept a function (#2183) by scottwoodall
+
+* show optional code interface inputs in usage rules by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.25](https://github.com/ash-project/ash/compare/v3.5.24...v3.5.25) (2025-07-02)
+
+
+
+
+### Bug Fixes:
+
+* handle additional cases in `Ash.Filter.flat_map` by [@zachdaniel](https://github.com/zachdaniel)
+
+* handle overlapping type short-codes in app/dependencies by [@zachdaniel](https://github.com/zachdaniel)
+
+* ensure that constraints are set on calculations by [@zachdaniel](https://github.com/zachdaniel)
+
+* Upgrade strip_metadata/1 to recurse on maps and handle additional metadata fields (#2169) by Samuel Wrenn
+
+* ensure that atomic upgrades assume casted inputs by [@zachdaniel](https://github.com/zachdaniel)
+
+* move length constraint checking to the end (#2155) by kernel-io
+
+### Improvements:
+
+* validate reserved constraint key names by [@zachdaniel](https://github.com/zachdaniel)
+
+* Read Action multitenancy :bypass_all (#2154) by xantrac
+
+* add missing types to Ash.load typespec (#2167) by [@barnabasJ](https://github.com/barnabasJ)
+
+* allow pure-binary sigils in expr fragments (#2165) by Frank Dugan III
+
+* add notifier trace/telemetry span type by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.24](https://github.com/ash-project/ash/compare/v3.5.23...v3.5.24) (2025-06-25)
+
+
+
+
+### Bug Fixes:
+
+* restrict subset of context -> opts in embedded changesets by [@zachdaniel](https://github.com/zachdaniel)
+
+* properly handle nested context for embeddable type by [@zachdaniel](https://github.com/zachdaniel)
+
+* Use the same parent query timeout for the count query, for `read` actions (#2161) by sevenseacat
+
+* ensure join query has shared context passed to it by [@zachdaniel](https://github.com/zachdaniel)
+
+* ensure shared context is set on through queries when loading by [@zachdaniel](https://github.com/zachdaniel)
+
+### Improvements:
+
+* make usage-rules more clear about require Ash.Query by [@zachdaniel](https://github.com/zachdaniel)
+
+* `require Ash.Query` in `Ash.Resource` by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.23](https://github.com/ash-project/ash/compare/v3.5.22...v3.5.23) (2025-06-19)
+
+
+
+
+### Bug Fixes:
+
+* set proper metadata key for bulk destroy changes by [@zachdaniel](https://github.com/zachdaniel)
+
+* don't override tenant if manually set by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.22](https://github.com/ash-project/ash/compare/v3.5.21...v3.5.22) (2025-06-18)
+
+
+
+
+### Bug Fixes:
+
+* template opts in conditions in atomic changes by [@zachdaniel](https://github.com/zachdaniel)
+
+* properly detect existing timestamp attributes in igniter tasks by [@zachdaniel](https://github.com/zachdaniel)
+
+### Improvements:
+
+* improve message for --dev migrations message by [@zachdaniel](https://github.com/zachdaniel)
+
+* add `mix ash` command by [@zachdaniel](https://github.com/zachdaniel)
+
+* handle changes to `nil` for unknown attribute values by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.21](https://github.com/ash-project/ash/compare/v3.5.20...v3.5.21) (2025-06-16)
+
+
+
+
+### Bug Fixes:
+
+* support read actions and arguments in Ash.Generator.action_input/3 (#2137) by [@barnabasJ](https://github.com/barnabasJ)
+
+* combination_of typespec (#2135) by [@barnabasJ](https://github.com/barnabasJ)
+
+### Improvements:
+
+* allow update_query when `expr_error` is nto supported by [@zachdaniel](https://github.com/zachdaniel)
+
+* only require atomicity when update_query *and* expr_error supported by [@zachdaniel](https://github.com/zachdaniel)
+
+* make installer avoid protocol consolidation by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.20](https://github.com/ash-project/ash/compare/v3.5.19...v3.5.20) (2025-06-13)
+
+
+
+
+### Bug Fixes:
+
+* support private_arguments in code interface and bulk actions (#2133) by [@barnabasJ](https://github.com/barnabasJ)
+* combination_of typespec (#2135) by [@barnabasJ](https://github.com/barnabasJ)
+
+## [v3.5.19](https://github.com/ash-project/ash/compare/v3.5.18...v3.5.19) (2025-06-12)
+
+
+
+
+### Bug Fixes:
+
+* bad pattern match in query inspect logic by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.18](https://github.com/ash-project/ash/compare/v3.5.17...v3.5.18) (2025-06-11)
+
+
+
+
+### Improvements:
+
+* support regexes in match constraint/validation again by [@zachdaniel](https://github.com/zachdaniel)
+
+## [v3.5.17](https://github.com/ash-project/ash/compare/v3.5.16...v3.5.17) (2025-06-10)
+
+
+
+
+### Bug Fixes:
+
+* set_tenant on combination query (#2123) by [@barnabasJ](https://github.com/barnabasJ)
+
+## [v3.5.16](https://github.com/ash-project/ash/compare/v3.5.15...v3.5.16) (2025-06-10)
+
+
+
+
+### Bug Fixes:
+
+* ensure context is properly threaded through bulk update/atomic upgrades by [@zachdaniel](https://github.com/zachdaniel)
+
+* ensure `actor: nil` key is retained on scope to opts by [@zachdaniel](https://github.com/zachdaniel)
+
+* ensure stream_batch_size is properly set to batch_size on stream by [@zachdaniel](https://github.com/zachdaniel)
+
+* set batch size option when streaming by [@zachdaniel](https://github.com/zachdaniel)
+
+* keep union types in order by [@zachdaniel](https://github.com/zachdaniel)
+
+* resolve accidentally backwards incompatible inspect implementation by [@zachdaniel](https://github.com/zachdaniel)
+
+* better error message on mismatch action types in changesets by [@zachdaniel](https://github.com/zachdaniel)
+
+* add clause in Ash.Type.String.match/1 to handle the OTP 28 regex tuples (#2119) by Simon Bergström
+
+* underlying ecto type casting should use coercion, not cast_input by [@zachdaniel](https://github.com/zachdaniel)
+
+* make decimal type less strict by [@zachdaniel](https://github.com/zachdaniel)
+
+* Fix typespecs for Ash.get! and Ash.load! (#2117) by Moxley Stratton
+
+* implement Scope.to_opts for policy authorizer by [@zachdaniel](https://github.com/zachdaniel)
+
+* simplify relationship loading, to prevent losing set query info by [@zachdaniel](https://github.com/zachdaniel)
+
+* typo in Ash.Error.Framework module (#2108) by Samuel Wrenn
+
+* ash.gen.validation generates invalid callback (#2103) by KasparKipp
+
+### Improvements:
+
+* show action when inspecting query by [@zachdaniel](https://github.com/zachdaniel)
+
+* add assert_stripped test helper (#2107) by Samuel Wrenn
+
+* fix misleading value in invalid attribute error by [@zachdaniel](https://github.com/zachdaniel)
+
+* better error message on unexpected argument inputs to code interfaces (#2102) by Abhishek Tripathi
+
 ## [v3.5.15](https://github.com/ash-project/ash/compare/v3.5.14...v3.5.15) (2025-06-04)
 
 

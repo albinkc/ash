@@ -58,7 +58,7 @@ defmodule Ash do
       doc: "The action to use, either an Action struct or the name of the action"
     ],
     authorize?: [
-      type: :boolean,
+      type: {:or, [:boolean, {:literal, nil}]},
       doc:
         "If an actor option is provided (even if it is `nil`), authorization happens automatically. If not, this flag can be used to authorize with no user."
     ],
@@ -404,6 +404,12 @@ defmodule Ash do
       type: :map,
       doc: "Context to set on each changeset"
     ],
+    private_arguments: [
+      type: :map,
+      default: %{},
+      doc:
+        "Private argument values to set on each changeset before validations and changes are run."
+    ],
     sorted?: [
       type: :boolean,
       default: false,
@@ -420,7 +426,7 @@ defmodule Ash do
       type: :boolean,
       default: Application.compile_env(:ash, :bulk_actions_default_to_errors?, false),
       doc:
-        "Whether or not to return all of the errors that occur. Defaults to false to account for large inserts."
+        "Whether to return all errors that occur during the operation. Defaults to the value of `:bulk_actions_default_to_errors?` in your config, or `false` if not set. Returning all errors may be expensive for large inserts."
     ],
     batch_size: [
       type: :pos_integer,
@@ -922,6 +928,11 @@ defmodule Ash do
       type: :boolean,
       default: false,
       doc: "Whether or not to return a forbidden error in cases of not being authorized."
+    ],
+    log?: [
+      type: :boolean,
+      default: false,
+      doc: "Whether or not to log the authorization result."
     ]
   ]
 
@@ -2002,7 +2013,7 @@ defmodule Ash do
   - [Read Actions Guide](/documentation/topics/actions/read-actions.md) for understanding read operations
   """
   @spec get!(Ash.Resource.t(), term(), Keyword.t()) ::
-          Ash.Resource.record() | no_return
+          Ash.Resource.record() | nil | no_return
   @doc spark_opts: [{2, @get_opts_schema}]
   def get!(resource, id, opts \\ []) do
     Ash.Helpers.expect_resource!(resource)
@@ -2050,7 +2061,7 @@ defmodule Ash do
   """
   @doc spark_opts: [{2, @get_opts_schema}]
   @spec get(Ash.Resource.t(), term(), Keyword.t()) ::
-          {:ok, Ash.Resource.record()} | {:error, term}
+          {:ok, Ash.Resource.record() | nil} | {:error, term}
   def get(resource, id, opts \\ []) do
     Ash.Helpers.expect_resource!(resource)
     Ash.Helpers.expect_options!(opts)
@@ -2359,15 +2370,16 @@ defmodule Ash do
   @spec load!(
           record_or_records ::
             record_or_records
+            | Ash.Page.page()
             | {:ok, record_or_records}
-            | :error
+            | {:ok, Ash.Page.page()}
             | {:error, term}
             | :ok
-            | Ash.Page.page(),
+            | nil,
           query :: load_statement(),
           opts :: Keyword.t()
         ) ::
-          Ash.Resource.record() | [Ash.Resource.record()] | no_return
+          Ash.Resource.record() | [Ash.Resource.record()] | nil | no_return
   @doc spark_opts: [{2, @load_opts_schema}]
   def load!(data, query, opts \\ []) do
     data
@@ -2411,11 +2423,18 @@ defmodule Ash do
   #{Spark.Options.docs(@load_opts_schema)}
   """
   @spec load(
-          record_or_records :: Ash.Resource.record() | [Ash.Resource.record()],
+          record_or_records ::
+            record_or_records
+            | Ash.Page.page()
+            | {:ok, record_or_records}
+            | {:ok, Ash.Page.page()}
+            | {:error, term}
+            | :ok
+            | nil,
           query :: load_statement(),
           opts :: Keyword.t()
         ) ::
-          {:ok, Ash.Resource.record() | [Ash.Resource.record()]} | {:error, term}
+          {:ok, Ash.Resource.record() | [Ash.Resource.record()] | nil} | {:error, term}
 
   @doc spark_opts: [{2, @load_opts_schema}]
   def load(data, query, opts \\ [])
@@ -2865,9 +2884,6 @@ defmodule Ash do
 
   ## Examples
 
-      iex> Ash.read_one(MyApp.User, email: "user@example.com")
-      {:ok, %MyApp.User{id: 1, email: "user@example.com"}}
-
       iex> MyApp.Post |> Ash.Query.filter(published: true) |> Ash.read_one()
       {:ok, %MyApp.Post{id: 1, published: true}}
 
@@ -3027,7 +3043,7 @@ defmodule Ash do
   """
   @doc spark_opts: [{1, @create_opts_schema}]
   @spec create!(
-          changset_or_resource :: Ash.Changeset.t() | Ash.Resource.t(),
+          changeset_or_resource :: Ash.Changeset.t() | Ash.Resource.t(),
           params_or_opts :: map() | Keyword.t(),
           opts :: Keyword.t()
         ) ::
@@ -3076,7 +3092,7 @@ defmodule Ash do
   """
   @doc spark_opts: [{1, @create_opts_schema}]
   @spec create(
-          changset_or_resource :: Ash.Changeset.t() | Ash.Resource.t(),
+          changeset_or_resource :: Ash.Changeset.t() | Ash.Resource.t(),
           params_or_opts :: map() | Keyword.t(),
           opts :: Keyword.t()
         ) ::

@@ -651,7 +651,7 @@ This prevents a common security vulnerability that would allow malicious actors 
 
 When a field is referenced in filters or sorts, the field reference is replaced with a conditional, that evaluates to the field value if the actor is authorized to view the field, or `nil` otherwise (causing all conditions to evaluate to `false`).
 
-Lets say that users have a field policy that only allows viewing the email address if the user's id matches the actor's id, similar to the abvoe example.
+Lets say that users have a field policy that only allows viewing the email address if the user's id matches the actor's id, similar to the above example.
 
 ```elixir
 field_policies do
@@ -729,6 +729,8 @@ config :ash, :policies, show_policy_breakdowns?: true
 
 It is generally safe to log authorization error details, even in production. This can be very helpful when investigating certain classes of issue.
 
+#### Global Logging Configuration
+
 To have Ash automatically log each authorization failure, use
 
 ```elixir
@@ -740,3 +742,17 @@ To have Ash log all policy breakdowns, even successful ones (this will be lots o
 ```elixir
 config :ash, :policies, log_successful_policy_breakdowns: :error # Use whatever log level you'd like to use here
 ```
+
+#### Per-Request Logging
+
+You can also enable logging for individual authorization checks by using the `log?` option with `Ash.can/3` and `Ash.can?/3`:
+
+```elixir
+# Log the authorization result for this specific check
+Ash.can?(Post, :read, current_user, log?: true)
+
+# This will log at info level when authorization succeeds or fails
+MyDomain.can_read_post?(current_user, post, log?: true)
+```
+
+When `log?: true` is set, authorization results will be logged at the `:info` level regardless of the global logging configuration. This is useful for debugging specific authorization issues without enabling verbose logging globally.

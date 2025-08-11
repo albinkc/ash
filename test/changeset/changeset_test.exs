@@ -434,6 +434,33 @@ defmodule Ash.Test.Changeset.ChangesetTest do
     end
   end
 
+  defmodule ResourceWithWrongActionType do
+    @moduledoc false
+    use Ash.Resource, domain: Domain, data_layer: Ash.DataLayer.Ets
+
+    ets do
+      private?(true)
+    end
+
+    actions do
+      defaults [:read, :destroy]
+
+      create :create do
+        accept [:name]
+      end
+
+      # This is intentionally wrong - creating a create action named :update
+      create :update do
+        accept [:name]
+      end
+    end
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string, public?: true
+    end
+  end
+
   test "before transaction hooks can set values" do
     post =
       SlugifiedPost
@@ -1311,6 +1338,84 @@ defmodule Ash.Test.Changeset.ChangesetTest do
         Ash.Changeset.for_destroy(category, :bananas, %{}, [])
       end)
     end
+
+    test "it fails when the action type doesn't match the changeset function" do
+      # Test calling for_update with a create action
+      record =
+        ResourceWithWrongActionType
+        |> Ash.Changeset.for_create(:create, %{name: "test"})
+        |> Ash.create!()
+
+      # After the fix, it should produce a clear error about wrong action type
+      assert_raise(
+        ArgumentError,
+        ~r/Action :update is a :create action, but we were expecting an :update action/,
+        fn ->
+          Ash.Changeset.for_update(record, :update, %{name: "updated"})
+        end
+      )
+    end
+
+    test "it provides helpful suggestion in action type mismatch error" do
+      record =
+        ResourceWithWrongActionType
+        |> Ash.Changeset.for_create(:create, %{name: "test"})
+        |> Ash.create!()
+
+      error_message =
+        assert_raise(
+          ArgumentError,
+          fn ->
+            Ash.Changeset.for_update(record, :update, %{name: "updated"})
+          end
+        ).message
+
+      assert error_message =~ "Perhaps"
+      assert error_message =~ "is not an :update action?"
+    end
+
+    test "it provides helpful error when passing module to for_update" do
+      assert_raise(
+        ArgumentError,
+        ~r/The first argument of.*for_update.*must be one of/,
+        fn ->
+          Ash.Changeset.for_update(ResourceWithWrongActionType, :update, %{name: "test"})
+        end
+      )
+    end
+
+    test "it provides helpful error when passing ID to for_update" do
+      error_message =
+        assert_raise(
+          ArgumentError,
+          fn ->
+            Ash.Changeset.for_update("some-id", :update, %{name: "test"})
+          end
+        ).message
+
+      assert error_message =~ "The first argument of"
+      assert error_message =~ "for_update"
+      assert error_message =~ "must be one of"
+    end
+
+    test "it provides helpful error when passing record to for_create" do
+      record =
+        ResourceWithWrongActionType
+        |> Ash.Changeset.for_create(:create, %{name: "test"})
+        |> Ash.create!()
+
+      error_message =
+        assert_raise(
+          ArgumentError,
+          fn ->
+            Ash.Changeset.for_create(record, :create, %{name: "test2"})
+          end
+        ).message
+
+      assert error_message =~ "The first argument of"
+      assert error_message =~ "for_create"
+      assert error_message =~ "must be a resource module"
+    end
   end
 
   describe "update_change/3" do
@@ -1402,5 +1507,29 @@ defmodule Ash.Test.Changeset.ChangesetTest do
       |> Ash.update!()
 
     assert :published == updated_resource.publication_status
+  end
+
+  describe "force_change_attribute" do
+    test "it changes the attribute to a value" do
+      post = Ash.Changeset.for_create(Post, :create) |> Ash.create!()
+
+      changeset =
+        post
+        |> Ash.Changeset.for_update(:update, %{})
+        |> Ash.Changeset.force_change_attribute(:title, "foo")
+
+      assert changeset.attributes == %{title: "foo"}
+    end
+
+    test "it sets the attribute to `nil` when the original value isn't available" do
+      post = Ash.Changeset.for_create(Post, :create) |> Ash.create!()
+
+      changeset =
+        %Post{id: post.id}
+        |> Ash.Changeset.for_update(:update, %{})
+        |> Ash.Changeset.force_change_attribute(:title, nil)
+
+      assert changeset.attributes == %{title: nil}
+    end
   end
 end

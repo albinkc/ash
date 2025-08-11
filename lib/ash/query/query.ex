@@ -165,6 +165,8 @@ defmodule Ash.Query do
     :lock,
     :to_tenant,
     sort_input_indices: [],
+    before_transaction: [],
+    after_transaction: [],
     around_transaction: [],
     invalid_keys: MapSet.new(),
     load_through: %{},
@@ -222,6 +224,9 @@ defmodule Ash.Query do
           aggregates: %{optional(atom) => Ash.Filter.t()},
           arguments: %{optional(atom) => any},
           before_action: [(t -> t)],
+          before_transaction: [before_transaction_fun],
+          after_transaction: [after_transaction_fun],
+          around_transaction: [around_transaction_fun],
           calculations: %{optional(atom) => :wat},
           context: map,
           errors: [Ash.Error.t()],
@@ -247,11 +252,13 @@ defmodule Ash.Query do
           {:ok, list(Ash.Resource.record())}
           | {:error, Ash.Error.t()}
 
-  @typedoc "Callback function type that takes a query and returns an around_result."
-  @type around_callback :: (t() -> around_result)
+  @typedoc "Function type for before_transaction hooks that run before query execution."
+  @type before_transaction_fun :: (t -> t | {:error, any})
 
-  @typedoc "Function type for around_action hooks that modify query execution flow."
-  @type around_action_fun :: (t, around_callback -> around_result)
+  @typedoc "Function type for after_transaction hooks that run after query execution."
+  @type after_transaction_fun ::
+          (t, {:ok, list(Ash.Resource.record())} | {:error, any} ->
+             {:ok, list(Ash.Resource.record())} | {:error, any})
 
   @typedoc "Function type for around_transaction hooks that wrap query execution in a transaction."
   @type around_transaction_fun :: (t -> {:ok, Ash.Resource.record()} | {:error, any})
@@ -322,6 +329,10 @@ defmodule Ash.Query do
         "#Ash.Query<",
         [
           concat("resource: ", inspect(query.resource)),
+          or_empty(
+            concat("action: ", inspect(query.action && query.action.name)),
+            not is_nil(query.action)
+          ),
           or_empty(concat("tenant: ", to_doc(query.to_tenant, opts)), tenant?),
           arguments(query, opts),
           # TODO: inspect these specially
@@ -521,7 +532,7 @@ defmodule Ash.Query do
   |> Ash.read!()
   ```
   """
-  @spec combination_of(t(), Ash.Query.Combination.t()) :: t()
+  @spec combination_of(t(), Ash.Query.Combination.t() | [Ash.Query.Combination.t()]) :: t()
   def combination_of(query, combinations) do
     query = new(query)
 
@@ -1074,10 +1085,197 @@ defmodule Ash.Query do
   defp has_key?(keyword, key), do: Keyword.has_key?(keyword, key)
 
   defp run_preparations(query, action, actor, authorize?, tracer, metadata) do
+    global_validations =
+      if action.skip_global_validations? do
+        []
+      else
+        Ash.Resource.Info.validations(query.resource, :read)
+      end
+
     query.resource
+    # 4.0 make global preparations happen
+    # after action level preparations
     |> Ash.Resource.Info.preparations()
     |> Enum.concat(action.preparations || [])
-    |> Enum.reduce_while(query, fn %{preparation: {module, opts}}, query ->
+    |> Enum.concat(global_validations)
+    |> Enum.reduce(query, fn
+      %{only_when_valid?: true}, %{valid?: false} = query ->
+        query
+
+      %{validation: {module, opts}} = validation, query ->
+        if __MODULE__ not in module.supports(opts) do
+          raise Ash.Error.Framework.UnsupportedSubject, subject: __MODULE__, module: module
+        end
+
+        validate(query, validation, tracer, metadata, actor)
+
+      %{preparation: _} = preparation, query ->
+        run_preparation(preparation, query, actor, authorize?, tracer, metadata)
+    end)
+  end
+
+  defp validate(query, validation, tracer, metadata, actor) do
+    if validation.before_action? do
+      before_action(query, fn query ->
+        if validation.only_when_valid? and not query.valid? do
+          query
+        else
+          do_validation(query, validation, tracer, metadata, actor)
+        end
+      end)
+    else
+      if validation.only_when_valid? and not query.valid? do
+        query
+      else
+        do_validation(query, validation, tracer, metadata, actor)
+      end
+    end
+  end
+
+  defp do_validation(query, validation, tracer, metadata, actor) do
+    context = %{
+      actor: query.context[:private][:actor],
+      tenant: query.tenant,
+      source_context: query.context,
+      authorize?: query.context[:private][:authorize?] || false,
+      tracer: query.context[:private][:tracer]
+    }
+
+    if Enum.all?(validation.where || [], fn {module, opts} ->
+         if __MODULE__ not in module.supports(opts) do
+           raise Ash.Error.Framework.UnsupportedSubject, subject: __MODULE__, module: module
+         end
+
+         opts =
+           Ash.Expr.fill_template(
+             opts,
+             actor: actor,
+             tenant: query.to_tenant,
+             args: query.arguments,
+             context: query.context
+           )
+
+         case module.init(opts) do
+           {:ok, opts} ->
+             module.validate(query, opts, struct(Ash.Resource.Validation.Context, context)) ==
+               :ok
+
+           _ ->
+             false
+         end
+       end) do
+      Ash.Tracer.span :validation, fn -> "validate: #{inspect(validation.module)}" end, tracer do
+        Ash.Tracer.telemetry_span [:ash, :validation], fn ->
+          %{
+            resource_short_name: Ash.Resource.Info.short_name(query.resource),
+            validation: inspect(validation.module)
+          }
+        end do
+          Ash.Tracer.set_metadata(tracer, :validation, metadata)
+
+          opts =
+            Ash.Expr.fill_template(
+              validation.opts,
+              actor: actor,
+              tenant: query.to_tenant,
+              args: query.arguments,
+              context: query.context
+            )
+
+          with {:ok, opts} <- validation.module.init(opts),
+               :ok <-
+                 validation.module.validate(
+                   query,
+                   opts,
+                   struct(
+                     Ash.Resource.Validation.Context,
+                     Map.put(context, :message, validation.message)
+                   )
+                 ) do
+            query
+          else
+            :ok ->
+              query
+
+            {:error, error} when is_binary(error) ->
+              add_error(query, validation.message || error)
+
+            {:error, error} when is_exception(error) ->
+              if validation.message do
+                error = Ash.Error.override_validation_message(error, validation.message)
+                add_error(query, error)
+              else
+                add_error(query, error)
+              end
+
+            {:error, errors} when is_list(errors) ->
+              if validation.message do
+                errors =
+                  Enum.map(errors, fn error ->
+                    Ash.Error.override_validation_message(error, validation.message)
+                  end)
+
+                add_error(query, errors)
+              else
+                add_error(query, errors)
+              end
+
+            {:error, error} ->
+              error =
+                if Keyword.keyword?(error) do
+                  Keyword.put(error, :message, validation.message || error[:message])
+                else
+                  validation.message || error
+                end
+
+              add_error(query, error)
+          end
+        end
+      end
+    else
+      query
+    end
+  end
+
+  defp run_preparation(
+         %{preparation: {module, opts}} = preparation,
+         query,
+         actor,
+         authorize?,
+         tracer,
+         metadata
+       ) do
+    context = %{
+      actor: actor,
+      tenant: query.tenant,
+      source_context: query.context,
+      authorize?: authorize? || false,
+      tracer: tracer
+    }
+
+    if Enum.all?(preparation.where || [], fn {module, opts} ->
+         if __MODULE__ not in module.supports(opts) do
+           raise Ash.Error.Framework.UnsupportedSubject, subject: __MODULE__, module: module
+         end
+
+         opts =
+           Ash.Expr.fill_template(
+             opts,
+             actor: actor,
+             tenant: query.to_tenant,
+             args: query.arguments,
+             context: query.context
+           )
+
+         case module.init(opts) do
+           {:ok, opts} ->
+             module.validate(query, opts, struct(Ash.Resource.Validation.Context, context)) ==
+               :ok
+
+           _ ->
+             false
+         end
+       end) do
       Ash.Tracer.span :preparation, fn -> "prepare: #{inspect(module)}" end, tracer do
         Ash.Tracer.telemetry_span [:ash, :preparation], fn ->
           %{
@@ -1085,45 +1283,97 @@ defmodule Ash.Query do
             preparation: inspect(module)
           }
         end do
-          Ash.Tracer.set_metadata(opts[:tracer], :preparation, metadata)
+          Ash.Tracer.set_metadata(tracer, :preparation, metadata)
 
-          case module.init(opts) do
-            {:ok, opts} ->
-              opts =
-                Ash.Expr.fill_template(
-                  opts,
-                  actor: actor,
-                  tenant: query.to_tenant,
-                  args: query.arguments,
-                  context: query.context
-                )
+          {:ok, opts} = module.init(opts)
 
-              case module.prepare(query, opts, %Ash.Resource.Preparation.Context{
-                     tenant: query.tenant,
-                     actor: actor,
-                     source_context: query.context,
-                     authorize?: authorize?,
-                     tracer: tracer
-                   }) do
-                %__MODULE__{} = prepared ->
-                  {:cont, prepared}
+          opts =
+            Ash.Expr.fill_template(
+              opts,
+              actor: actor,
+              tenant: query.to_tenant,
+              args: query.arguments,
+              context: query.context
+            )
 
-                other ->
-                  raise """
-                  Invalid value returned from #{inspect(module)}.prepare/3
-
-                  A query must be returned, but the following was received instead:
-
-                  #{inspect(other)}
-                  """
-              end
-
-            {:error, error} ->
-              {:halt, Ash.Query.add_error(query, error)}
-          end
+          preparation_context = struct(Ash.Resource.Preparation.Context, context)
+          Ash.Resource.Preparation.prepare(module, query, opts, preparation_context)
         end
       end
-    end)
+    else
+      query
+    end
+  end
+
+  @doc """
+  Adds a before_transaction hook to the query.
+
+  The before_transaction hook runs before the database transaction begins.
+  It receives the query and must return either a modified query or an error.
+
+  ## Examples
+
+      # Add logging before transaction
+      iex> query = MyApp.Post |> Ash.Query.before_transaction(fn query ->
+      ...>   IO.puts("Starting transaction for \#{inspect(query.resource)}")
+      ...>   query
+      ...> end)
+
+  ## See also
+
+  - `after_transaction/2` for hooks that run after the transaction
+  - `around_transaction/2` for hooks that wrap the entire transaction
+  - `before_action/3` for hooks that run before the action (inside transaction)
+  """
+  @spec before_transaction(
+          query :: t(),
+          fun :: before_transaction_fun(),
+          opts :: Keyword.t()
+        ) :: t()
+  def before_transaction(query, func, opts \\ []) do
+    query = new(query)
+
+    if opts[:prepend?] do
+      %{query | before_transaction: [func | query.before_transaction]}
+    else
+      %{query | before_transaction: query.before_transaction ++ [func]}
+    end
+  end
+
+  @doc """
+  Adds an after_transaction hook to the query.
+
+  The after_transaction hook runs after the database transaction completes,
+  regardless of success or failure. It receives the query and the result,
+  and can modify the result or perform cleanup operations.
+
+  ## Examples
+
+      # Add cleanup after transaction
+      iex> query = MyApp.Post |> Ash.Query.after_transaction(fn query, result ->
+      ...>   cleanup_resources()
+      ...>   result
+      ...> end)
+
+  ## See also
+
+  - `before_transaction/2` for hooks that run before the transaction
+  - `around_transaction/2` for hooks that wrap the entire transaction
+  - `after_action/2` for hooks that run after the action (inside transaction)
+  """
+  @spec after_transaction(
+          query :: t(),
+          fun :: after_transaction_fun(),
+          opts :: Keyword.t()
+        ) :: t()
+  def after_transaction(query, func, opts \\ []) do
+    query = new(query)
+
+    if opts[:prepend?] do
+      %{query | after_transaction: [func | query.after_transaction]}
+    else
+      %{query | after_transaction: query.after_transaction ++ [func]}
+    end
   end
 
   @doc """
@@ -1164,15 +1414,26 @@ defmodule Ash.Query do
 
   ## See also
 
+  - `before_transaction/2` for hooks that run before the transaction
+  - `after_transaction/2` for hooks that run after the transaction
   - `before_action/3` for hooks that run before the action executes
   - `after_action/2` for hooks that run after the action completes
   - `Ash.read/2` for executing queries with hooks
   """
 
-  @spec around_transaction(t(), around_transaction_fun()) :: t()
-  def around_transaction(query, func) do
+  @spec around_transaction(
+          query :: t(),
+          fun :: around_transaction_fun(),
+          opts :: Keyword.t()
+        ) :: t()
+  def around_transaction(query, func, opts \\ []) do
     query = new(query)
-    %{query | around_transaction: query.around_transaction ++ [func]}
+
+    if opts[:prepend?] do
+      %{query | around_transaction: [func | query.around_transaction]}
+    else
+      %{query | around_transaction: query.around_transaction ++ [func]}
+    end
   end
 
   @doc """
@@ -1295,11 +1556,11 @@ defmodule Ash.Query do
   - `Ash.read/2` for executing queries with hooks
   """
   @spec after_action(
-          t(),
-          (t(), [Ash.Resource.record()] ->
-             {:ok, [Ash.Resource.record()]}
-             | {:ok, [Ash.Resource.record()], list(Ash.Notifier.Notification.t())}
-             | {:error, term})
+          query :: t(),
+          fun :: (t(), [Ash.Resource.record()] ->
+                    {:ok, [Ash.Resource.record()]}
+                    | {:ok, [Ash.Resource.record()], list(Ash.Notifier.Notification.t())}
+                    | {:error, term})
         ) :: t()
   # in 4.0, add an option to prepend hooks
   def after_action(query, func) do
@@ -1498,7 +1759,7 @@ defmodule Ash.Query do
   end
 
   @doc """
-  Determines if the provided expression would return data that is a suprset of the data returned by the filter on the query.
+  Determines if the provided expression would return data that is a subset of the data returned by the filter on the query.
 
   This uses the satisfiability solver that is used when solving for policy authorizations. In complex scenarios, or when using
   custom database expressions, (like fragments in ash_postgres), this function may return `:maybe`. Use `subset_of?` to always return
@@ -2159,16 +2420,22 @@ defmodule Ash.Query do
           )
         end
 
-      Ash.Resource.Info.attribute(query.resource, field) ->
+      is_atom(field) && Ash.Resource.Info.attribute(query.resource, field) ->
         ensure_selected(query, field)
 
       rel = Ash.Resource.Info.relationship(query.resource, field) ->
         load_relationship(query, rel, [], opts)
 
       aggregate = Ash.Resource.Info.aggregate(query.resource, field) ->
-        with {:can?, true} <-
-               {:can?,
-                Ash.DataLayer.data_layer_can?(query.resource, {:aggregate, aggregate.kind})},
+        can_do_aggregate? =
+          if Map.get(aggregate, :related?, true) do
+            Ash.DataLayer.data_layer_can?(query.resource, {:aggregate, aggregate.kind})
+          else
+            Ash.DataLayer.data_layer_can?(query.resource, {:aggregate, aggregate.kind}) &&
+              Ash.DataLayer.data_layer_can?(query.resource, {:aggregate, :unrelated})
+          end
+
+        with {:can?, true} <- {:can?, can_do_aggregate?},
              {:ok, query_aggregate} <-
                Aggregate.new(
                  query.resource,
@@ -2189,7 +2456,10 @@ defmodule Ash.Query do
                  authorize?: aggregate.authorize?,
                  sortable?: aggregate.sortable?,
                  sensitive?: aggregate.sensitive?,
-                 join_filters: Map.new(aggregate.join_filters, &{&1.relationship_path, &1.filter})
+                 join_filters:
+                   Map.new(aggregate.join_filters, &{&1.relationship_path, &1.filter}),
+                 resource: aggregate.resource,
+                 related?: Map.get(aggregate, :related?, true)
                ) do
           query_aggregate = %{query_aggregate | load: field}
           new_aggregates = Map.put(query.aggregates, aggregate.name, query_aggregate)
@@ -2535,9 +2805,12 @@ defmodule Ash.Query do
   - `set_argument/3` for adding arguments to queries
   - `for_read/4` for creating queries with arguments
   """
-  @spec get_argument(t, atom) :: term
-  def get_argument(query, argument) when is_atom(argument) do
-    Map.get(query.arguments, argument) || Map.get(query.arguments, to_string(argument))
+  @spec get_argument(t, atom | String.t()) :: term
+  def get_argument(query, argument) when is_atom(argument) or is_binary(argument) do
+    case fetch_argument(query, argument) do
+      {:ok, value} -> value
+      :error -> nil
+    end
   end
 
   @doc """
@@ -2570,8 +2843,10 @@ defmodule Ash.Query do
   - `set_argument/3` for adding arguments to queries
   - `for_read/4` for creating queries with arguments
   """
-  @spec fetch_argument(t, atom) :: {:ok, term} | :error
-  def fetch_argument(query, argument) when is_atom(argument) do
+  @spec fetch_argument(t, atom | String.t()) :: {:ok, term} | :error
+  def fetch_argument(query, argument) when is_atom(argument) or is_binary(argument) do
+    query = new(query)
+
     case Map.fetch(query.arguments, argument) do
       {:ok, value} ->
         {:ok, value}
@@ -3153,9 +3428,33 @@ defmodule Ash.Query do
     query = new(query)
     relationship = List.wrap(relationship)
 
-    if Ash.DataLayer.data_layer_can?(query.resource, {:aggregate, kind}) do
-      related = Ash.Resource.Info.related(query.resource, relationship)
+    {related, actual_relationship, opts_with_resource, is_unrelated?} =
+      case relationship do
+        [module] when is_atom(module) ->
+          if function_exported?(module, :__info__, 1) do
+            {module, [], Keyword.put(opts, :resource, module), true}
+          else
+            related = Ash.Resource.Info.related(query.resource, relationship)
+            {related, relationship, opts, false}
+          end
 
+        _ ->
+          # Regular relationship path
+          related = Ash.Resource.Info.related(query.resource, relationship)
+          {related, relationship, opts, false}
+      end
+
+    # Check data layer capabilities
+    can_do_aggregate? =
+      if is_unrelated? do
+        Ash.DataLayer.data_layer_can?(query.resource, {:aggregate, kind}) &&
+          Ash.DataLayer.data_layer_can?(query.resource, {:aggregate, :unrelated})
+      else
+        # For related aggregates, just check the aggregate kind
+        Ash.DataLayer.data_layer_can?(query.resource, {:aggregate, kind})
+      end
+
+    if can_do_aggregate? do
       agg_query =
         case agg_query do
           [] ->
@@ -3179,21 +3478,26 @@ defmodule Ash.Query do
              query.resource,
              name,
              kind,
-             path: relationship,
-             query: agg_query,
-             field: field,
-             default: default,
-             filterable?: filterable?,
-             sortable?: sortable?,
-             sensitive?: sensitive?,
-             include_nil?: include_nil?,
-             type: type,
-             constraints: constraints,
-             implementation: implementation,
-             uniq?: uniq?,
-             read_action: read_action,
-             authorize?: authorize?,
-             join_filters: join_filters
+             Keyword.merge(
+               [
+                 path: actual_relationship,
+                 query: agg_query,
+                 field: field,
+                 default: default,
+                 filterable?: filterable?,
+                 sortable?: sortable?,
+                 sensitive?: sensitive?,
+                 include_nil?: include_nil?,
+                 type: type,
+                 constraints: constraints,
+                 implementation: implementation,
+                 uniq?: uniq?,
+                 read_action: read_action,
+                 authorize?: authorize?,
+                 join_filters: join_filters
+               ],
+               opts_with_resource
+             )
            ) do
         {:ok, aggregate} ->
           new_aggregates = Map.put(query.aggregates, aggregate.name, aggregate)
@@ -4256,6 +4560,7 @@ defmodule Ash.Query do
           end)
 
         base_query
+        |> Ash.Query.set_tenant(query.tenant)
         |> limit(combination.limit)
         |> offset(combination.offset)
         |> do_filter(combination.filter)

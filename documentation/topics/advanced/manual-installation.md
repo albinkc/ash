@@ -47,6 +47,10 @@ Update `.formatter.exs`:
   ]
 ```
 
+## Skip protocol consolidation
+To avoid warnings about protocol consolidation when recompiling in dev, we
+set protocolc onsolidation to happen only in non-dev environments.
+
 ## Setup The Formatter
 Configure the DSL auto-formatter. This tells the formatter to remove excess parentheses
 and how to sort sections in your Ash.Resource & Ash.Domain modules for consistency.
@@ -90,6 +94,39 @@ Update `config/config.exs`:
 +     "Ash.Domain": [section_order: [:resources, :policies, :authorization, :domain, :execution]]
 +   ]
 +
+```
+
+## Configure Dev/Test environments
+Configure backwards compatibility settings. See the [backwards compatibility guide](https://hexdocs.pm/ash/backwards-compatibility-config.html)
+for an explanation of each of the configurations.
+
+Update `config/config.exs`:
+```diff
+...
+    ]
+  
++ import_config "#{config_env()}.exs"
++
+```
+
+Create `config/dev.exs`:
+```
+import Config
+config :ash, policies: [show_policy_breakdowns?: true]
+
+```
+
+Create `config/prod.exs`:
+```
+import Config
+
+```
+
+Create `config/test.exs`:
+```
+import Config
+config :ash, policies: [show_policy_breakdowns?: true]
+
 ```
 
 ## Setup Backwards Compatibility Configurations

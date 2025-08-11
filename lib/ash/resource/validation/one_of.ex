@@ -37,12 +37,18 @@ defmodule Ash.Resource.Validation.OneOf do
   end
 
   @impl true
-  def validate(changeset, opts, _context) do
+  def supports(_opts), do: [Ash.Changeset, Ash.Query, Ash.ActionInput]
+
+  @impl true
+  def validate(subject, opts, _context) do
     value =
-      if Enum.any?(changeset.action.arguments, &(&1.name == opts[:attribute])) do
-        Ash.Changeset.fetch_argument(changeset, opts[:attribute])
+      if Enum.any?(subject.action.arguments, &(&1.name == opts[:attribute])) do
+        Ash.Subject.fetch_argument(subject, opts[:attribute])
       else
-        {:ok, Ash.Changeset.get_attribute(changeset, opts[:attribute])}
+        case subject do
+          %Ash.Changeset{} -> {:ok, Ash.Changeset.get_attribute(subject, opts[:attribute])}
+          _ -> :error
+        end
       end
 
     case value do

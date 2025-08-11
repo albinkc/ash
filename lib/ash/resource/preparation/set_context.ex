@@ -3,11 +3,13 @@ defmodule Ash.Resource.Preparation.SetContext do
 
   use Ash.Resource.Preparation
 
-  def prepare(query, opts, _context) do
+  def supports(_opts), do: [Ash.Query, Ash.ActionInput]
+
+  def prepare(subject, opts, _context) do
     context =
       case opts[:context] do
         {m, f, a} when is_atom(m) and is_atom(f) and is_list(a) ->
-          apply(m, f, [query | a])
+          apply(m, f, [subject | a])
 
         other ->
           {:ok, other}
@@ -15,10 +17,13 @@ defmodule Ash.Resource.Preparation.SetContext do
 
     case context do
       {:ok, context} ->
-        Ash.Query.set_context(query, context)
+        Ash.Subject.set_context(subject, context)
 
       {:error, error} ->
-        Ash.Query.add_error(query, error)
+        Ash.Subject.add_error(subject, error)
+
+      context ->
+        Ash.Subject.set_context(subject, context)
     end
   end
 end

@@ -46,8 +46,11 @@ defmodule Ash.Resource.Validation.StringLength do
   end
 
   @impl true
-  def validate(changeset, opts, _context) do
-    case Ash.Changeset.get_argument_or_attribute(changeset, opts[:attribute]) do
+  def supports(_opts), do: [Ash.Changeset, Ash.Query, Ash.ActionInput]
+
+  @impl true
+  def validate(subject, opts, _context) do
+    case Ash.Subject.get_argument_or_attribute(subject, opts[:attribute]) do
       nil ->
         :ok
 

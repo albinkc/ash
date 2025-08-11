@@ -35,6 +35,124 @@ defmodule Ash.Test.Actions.ReadTest do
       read :in_transaction do
         transaction? true
       end
+
+      read :read_with_validation do
+        argument :must_be_true, :boolean
+
+        validate fn query, _ ->
+          if query.arguments[:must_be_true] == true do
+            :ok
+          else
+            {:error, field: :must_be_true, message: "must be true"}
+          end
+        end
+      end
+
+      read :read_with_action_is do
+        argument :unused, :string
+        validate action_is([:read_with_action_is])
+      end
+
+      read :read_with_argument_does_not_equal do
+        argument :status, :string
+        validate argument_does_not_equal(:status, "forbidden")
+      end
+
+      read :read_with_argument_equals do
+        argument :mode, :string
+        validate argument_equals(:mode, "active")
+      end
+
+      read :read_with_argument_in do
+        argument :category, :string
+        validate argument_in(:category, ["news", "sports", "tech"])
+      end
+
+      read :read_with_compare do
+        argument :min_value, :integer
+        argument :max_value, :integer
+        validate compare(:min_value, less_than: :max_value)
+      end
+
+      read :read_with_confirm do
+        argument :password, :string
+        argument :password_confirmation, :string
+        validate confirm(:password, :password_confirmation)
+      end
+
+      read :read_with_match do
+        argument :email, :string
+        validate match(:email, ~r/^[^\s]+@[^\s]+\.[^\s]+$/)
+      end
+
+      read :read_with_negate do
+        argument :name, :string
+        validate negate(argument_equals(:name, "banned"))
+      end
+
+      read :read_with_one_of do
+        argument :priority, :string
+        validate one_of(:priority, ["low", "medium", "high"])
+      end
+
+      read :read_with_present do
+        argument :required_field, :string
+        validate present([:required_field])
+      end
+
+      read :read_with_string_length do
+        argument :username, :string
+        validate string_length(:username, min: 3, max: 20)
+      end
+
+      # Tests for where clauses
+      read :read_with_preparation_where do
+        argument :should_prepare, :boolean, default: false
+        argument :value, :string
+
+        prepare set_context(%{prepared: true}) do
+          where argument_equals(:should_prepare, true)
+        end
+      end
+
+      read :read_with_validation_where do
+        argument :validate_email, :boolean, default: false
+        argument :email, :string
+
+        validate match(:email, ~r/^[^\s]+@[^\s]+\.[^\s]+$/) do
+          where argument_equals(:validate_email, true)
+        end
+      end
+
+      # Tests for only_when_valid?
+      read :read_with_only_when_valid do
+        argument :required_arg, :string
+
+        validate present([:required_arg])
+
+        prepare set_context(%{preparation_ran: true}) do
+          only_when_valid? true
+        end
+      end
+
+      read :read_with_validation_only_when_valid do
+        argument :value, :integer
+
+        prepare set_context(%{test_only_when_valid: true})
+
+        validate compare(:value, greater_than: 0)
+
+        validate fn query, _ ->
+          # This validation should only run if the query is valid
+          if query.context[:test_only_when_valid] do
+            :ok
+          else
+            {:error, field: :value, message: "test_only_when_valid not set"}
+          end
+        end do
+          only_when_valid? true
+        end
+      end
     end
 
     attributes do
@@ -586,6 +704,23 @@ defmodule Ash.Test.Actions.ReadTest do
     end
   end
 
+  describe "validations" do
+    test "passing validations produce no errors" do
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_validation, %{must_be_true: true})
+               |> Ash.read!()
+    end
+
+    test "failing validations produce errors" do
+      assert_raise Ash.Error.Invalid, ~r/must be true/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_validation, %{must_be_true: false})
+        |> Ash.read!()
+      end
+    end
+  end
+
   describe "relationship filters" do
     setup do
       author1 =
@@ -782,6 +917,617 @@ defmodule Ash.Test.Actions.ReadTest do
                  skip_unknown_inputs: [:unknown]
                )
                |> Ash.read()
+    end
+  end
+
+  describe "tenant metadata in before_action hooks" do
+    defmodule TenantPost do
+      @moduledoc false
+      use Ash.Resource, domain: Domain, data_layer: Ash.DataLayer.Ets
+
+      ets do
+        private?(true)
+      end
+
+      multitenancy do
+        strategy(:attribute)
+        attribute(:org_id)
+      end
+
+      actions do
+        default_accept :*
+        defaults [:read, :destroy, create: :*, update: :*]
+
+        read :read_with_tenant_hook do
+          prepare fn query, _opts ->
+            Ash.Query.before_action(query, fn query ->
+              # Modify the tenant in the before_action hook
+              # This simulates cases where tenant might be dynamically determined
+              original_tenant = query.tenant
+              modified_tenant = "modified-#{original_tenant}"
+              Ash.Query.set_tenant(query, modified_tenant)
+            end)
+          end
+        end
+
+        read :bypass_and_set_tenant do
+          multitenancy(:bypass)
+
+          prepare fn query, _opts ->
+            Ash.Query.before_action(query, fn query ->
+              # Dynamically set tenant in before_action hook
+              Ash.Query.set_tenant(query, "dynamic-tenant")
+            end)
+          end
+        end
+      end
+
+      attributes do
+        uuid_primary_key(:id)
+        attribute(:title, :string, public?: true)
+        attribute(:contents, :string, public?: true)
+        attribute(:org_id, :uuid, public?: true)
+      end
+    end
+
+    setup do
+      %{tenant1: Ash.UUID.generate(), tenant2: Ash.UUID.generate()}
+    end
+
+    test "tenant modified in before_action hook appears in record metadata", %{tenant1: tenant1} do
+      TenantPost
+      |> Ash.Changeset.for_create(:create, %{title: "test", contents: "yeet"}, tenant: tenant1)
+      |> Ash.create!()
+
+      # Read with the action that modifies tenant in before_action hook
+      [result] =
+        TenantPost
+        |> Ash.Query.set_tenant(tenant1)
+        |> Ash.read!(action: :read_with_tenant_hook)
+
+      assert result.__metadata__.tenant == "modified-#{tenant1}"
+    end
+
+    test "tenant set in before_action hook with bypass works correctly", %{tenant1: tenant1} do
+      TenantPost
+      |> Ash.Changeset.for_create(:create, %{title: "test", contents: "yeet"}, tenant: tenant1)
+      |> Ash.create!()
+
+      # Read with the action that bypasses tenant requirements but sets tenant in before_action hook
+      [result] =
+        TenantPost
+        |> Ash.read!(action: :bypass_and_set_tenant)
+
+      assert result.__metadata__.tenant == "dynamic-tenant"
+    end
+  end
+
+  describe "query validations" do
+    test "action_is validation passes when action matches" do
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_action_is, %{unused: "test"})
+               |> Ash.read!()
+    end
+
+    test "argument_does_not_equal validation passes when argument is different" do
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_argument_does_not_equal, %{status: "active"})
+               |> Ash.read!()
+    end
+
+    test "argument_does_not_equal validation fails when argument equals forbidden value" do
+      assert_raise Ash.Error.Invalid, ~r/must not equal/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_argument_does_not_equal, %{status: "forbidden"})
+        |> Ash.read!()
+      end
+    end
+
+    test "argument_equals validation passes when argument matches" do
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_argument_equals, %{mode: "active"})
+               |> Ash.read!()
+    end
+
+    test "argument_equals validation fails when argument doesn't match" do
+      assert_raise Ash.Error.Invalid, ~r/must equal/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_argument_equals, %{mode: "inactive"})
+        |> Ash.read!()
+      end
+    end
+
+    test "argument_in validation passes when argument is in list" do
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_argument_in, %{category: "news"})
+               |> Ash.read!()
+    end
+
+    test "argument_in validation fails when argument is not in list" do
+      assert_raise Ash.Error.Invalid, ~r/must equal/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_argument_in, %{category: "invalid"})
+        |> Ash.read!()
+      end
+    end
+
+    test "compare validation passes when comparison is satisfied" do
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_compare, %{min_value: 5, max_value: 10})
+               |> Ash.read!()
+    end
+
+    test "compare validation fails when comparison is not satisfied" do
+      assert_raise Ash.Error.Invalid, ~r/must be less than/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_compare, %{min_value: 15, max_value: 10})
+        |> Ash.read!()
+      end
+    end
+
+    test "confirm validation passes when fields match" do
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_confirm, %{
+                 password: "secret",
+                 password_confirmation: "secret"
+               })
+               |> Ash.read!()
+    end
+
+    test "confirm validation fails when fields don't match" do
+      assert_raise Ash.Error.Invalid, ~r/confirmation did not match/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_confirm, %{
+          password: "secret",
+          password_confirmation: "different"
+        })
+        |> Ash.read!()
+      end
+    end
+
+    test "match validation passes when argument matches regex" do
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_match, %{email: "test@example.com"})
+               |> Ash.read!()
+    end
+
+    test "match validation fails when argument doesn't match regex" do
+      assert_raise Ash.Error.Invalid, ~r/must match/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_match, %{email: "invalid-email"})
+        |> Ash.read!()
+      end
+    end
+
+    test "negate validation passes when negated validation fails" do
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_negate, %{name: "allowed"})
+               |> Ash.read!()
+    end
+
+    test "negate validation fails when negated validation passes" do
+      assert_raise Ash.Error.Invalid, ~r/must not pass validation/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_negate, %{name: "banned"})
+        |> Ash.read!()
+      end
+    end
+
+    test "one_of validation passes when argument is in allowed values" do
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_one_of, %{priority: "high"})
+               |> Ash.read!()
+    end
+
+    test "one_of validation fails when argument is not in allowed values" do
+      assert_raise Ash.Error.Invalid, ~r/expected one of/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_one_of, %{priority: "urgent"})
+        |> Ash.read!()
+      end
+    end
+
+    test "present validation passes when required field is present" do
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_present, %{required_field: "value"})
+               |> Ash.read!()
+    end
+
+    test "present validation fails when required field is missing" do
+      assert_raise Ash.Error.Invalid, ~r/must be present/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_present, %{})
+        |> Ash.read!()
+      end
+    end
+
+    test "string_length validation passes when string is within bounds" do
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_string_length, %{username: "john"})
+               |> Ash.read!()
+    end
+
+    test "string_length validation fails when string is too short" do
+      assert_raise Ash.Error.Invalid, ~r/must have length of between/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_string_length, %{username: "ab"})
+        |> Ash.read!()
+      end
+    end
+
+    test "string_length validation fails when string is too long" do
+      assert_raise Ash.Error.Invalid, ~r/must have length of between/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_string_length, %{
+          username: "this_username_is_way_too_long_to_be_valid"
+        })
+        |> Ash.read!()
+      end
+    end
+  end
+
+  describe "preparations with where clauses" do
+    test "preparation runs when where clause is satisfied" do
+      query =
+        Author
+        |> Ash.Query.for_read(:read_with_preparation_where, %{
+          should_prepare: true,
+          value: "test"
+        })
+
+      assert query.context[:prepared] == true
+    end
+
+    test "preparation does not run when where clause is not satisfied" do
+      query =
+        Author
+        |> Ash.Query.for_read(:read_with_preparation_where, %{
+          should_prepare: false,
+          value: "test"
+        })
+
+      refute Map.has_key?(query.context, :prepared)
+    end
+  end
+
+  describe "validations with where clauses" do
+    test "validation runs when where clause is satisfied" do
+      # Valid email should pass
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_validation_where, %{
+                 validate_email: true,
+                 email: "test@example.com"
+               })
+               |> Ash.read!()
+
+      # Invalid email should fail
+      assert_raise Ash.Error.Invalid, ~r/must match/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_validation_where, %{
+          validate_email: true,
+          email: "not-an-email"
+        })
+        |> Ash.read!()
+      end
+    end
+
+    test "validation does not run when where clause is not satisfied" do
+      # Invalid email should still pass because validation doesn't run
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_validation_where, %{
+                 validate_email: false,
+                 email: "not-an-email"
+               })
+               |> Ash.read!()
+    end
+  end
+
+  describe "only_when_valid? option" do
+    test "preparation with only_when_valid? runs when query is valid" do
+      query =
+        Author
+        |> Ash.Query.for_read(:read_with_only_when_valid, %{
+          required_arg: "provided"
+        })
+
+      assert query.context[:preparation_ran] == true
+    end
+
+    test "preparation with only_when_valid? does not run when query is invalid" do
+      # This will fail validation, so the preparation should not run
+      assert_raise Ash.Error.Invalid, ~r/must be present/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_only_when_valid, %{})
+        |> Ash.read!()
+      end
+    end
+
+    test "validation with only_when_valid? runs when earlier validations pass" do
+      # Valid value (> 0) should pass all validations
+      assert [] =
+               Author
+               |> Ash.Query.for_read(:read_with_validation_only_when_valid, %{
+                 value: 5
+               })
+               |> Ash.read!()
+    end
+
+    test "validation with only_when_valid? does not run when earlier validations fail" do
+      # Value <= 0 should fail the first validation
+      # The second validation with only_when_valid? should not run
+      # So we should get the "greater than" error, not the "test_only_when_valid not set" error
+      assert_raise Ash.Error.Invalid, ~r/must be greater than/, fn ->
+        Author
+        |> Ash.Query.for_read(:read_with_validation_only_when_valid, %{
+          value: 0
+        })
+        |> Ash.read!()
+      end
+    end
+  end
+
+  defmodule GlobalValidationRead do
+    @moduledoc false
+    use Ash.Resource, domain: Domain, data_layer: Ash.DataLayer.Ets
+
+    ets do
+      private?(true)
+    end
+
+    attributes do
+      uuid_primary_key :id
+      attribute :name, :string, public?: true
+    end
+
+    actions do
+      default_accept :*
+      defaults [:read, :destroy, create: :*, update: :*]
+
+      read :skip_global do
+        skip_global_validations? true
+        argument :name, :string
+      end
+
+      read :with_global do
+        argument :name, :string
+      end
+    end
+
+    validations do
+      validate present(:name), on: [:read]
+    end
+  end
+
+  describe "global validations on read actions" do
+    test "global validations run on read actions by default" do
+      assert_raise Ash.Error.Invalid, ~r/must be present/, fn ->
+        GlobalValidationRead
+        |> Ash.Query.for_read(:with_global, %{})
+        |> Ash.read!()
+      end
+
+      # Should pass when argument is provided
+      assert [] =
+               GlobalValidationRead
+               |> Ash.Query.for_read(:with_global, %{name: "test"})
+               |> Ash.read!()
+    end
+
+    test "global validations can be skipped on read actions" do
+      # Should pass even without required argument when global validations are skipped
+      assert [] =
+               GlobalValidationRead
+               |> Ash.Query.for_read(:skip_global, %{})
+               |> Ash.read!()
+    end
+  end
+
+  describe "transaction hooks" do
+    test "before_transaction hook can modify query" do
+      author1 = Author |> Ash.Changeset.for_create(:create, %{name: "Test"}) |> Ash.create!()
+      _author2 = Author |> Ash.Changeset.for_create(:create, %{name: "Other"}) |> Ash.create!()
+
+      query =
+        Author
+        |> Ash.Query.before_transaction(fn query ->
+          Ash.Query.filter(query, name == "Test")
+        end)
+
+      results = Ash.read!(query, action: :in_transaction)
+
+      assert length(results) == 1
+      assert List.first(results).id == author1.id
+    end
+
+    test "before_transaction hook can return an error" do
+      query =
+        Author
+        |> Ash.Query.before_transaction(fn _query ->
+          {:error, "Before transaction error"}
+        end)
+
+      assert_raise Ash.Error.Unknown, ~r/Before transaction error/, fn ->
+        Ash.read!(query, action: :in_transaction)
+      end
+    end
+
+    test "multiple before_transaction hooks run in order" do
+      agent = start_supervised!({Agent, fn -> [] end})
+
+      query =
+        Author
+        |> Ash.Query.before_transaction(fn query ->
+          Agent.update(agent, &["first" | &1])
+          query
+        end)
+        |> Ash.Query.before_transaction(fn query ->
+          Agent.update(agent, &["second" | &1])
+          query
+        end)
+
+      Ash.read!(query, action: :in_transaction)
+
+      assert Agent.get(agent, & &1) == ["second", "first"]
+    end
+
+    test "after_transaction hook receives query and result" do
+      author =
+        Author |> Ash.Changeset.for_create(:create, %{name: "Test"}) |> Ash.create!()
+
+      agent = start_supervised!({Agent, fn -> nil end})
+
+      query =
+        Author
+        |> Ash.Query.filter(name == "Test")
+        |> Ash.Query.after_transaction(fn query, result ->
+          Agent.update(agent, fn _ -> {query.resource, result} end)
+          result
+        end)
+
+      results = Ash.read!(query, action: :in_transaction)
+
+      {resource, result_tuple} = Agent.get(agent, & &1)
+      assert resource == Author
+      assert {:ok, _, _, _, _, _} = result_tuple
+      assert length(results) == 1
+      assert List.first(results).id == author.id
+    end
+
+    test "after_transaction hook can modify the result" do
+      Author |> Ash.Changeset.for_create(:create, %{name: "Test"}) |> Ash.create!()
+
+      query =
+        Author
+        |> Ash.Query.filter(name == "Test")
+        |> Ash.Query.after_transaction(fn _query,
+                                          {:ok, results, count, calc_runtime, calc_query, query} ->
+          modified_results = Enum.map(results, &Map.put(&1, :__metadata__, :modified))
+          {:ok, modified_results, count, calc_runtime, calc_query, query}
+        end)
+
+      results = Ash.read!(query, action: :in_transaction)
+      assert List.first(results).__metadata__ == :modified
+    end
+
+    test "after_transaction hook runs on error" do
+      agent = start_supervised!({Agent, fn -> nil end})
+
+      query =
+        Author
+        |> Ash.Query.before_transaction(fn _query ->
+          {:error, "Intentional error"}
+        end)
+        |> Ash.Query.after_transaction(fn _query, result ->
+          Agent.update(agent, fn _ -> result end)
+          result
+        end)
+
+      assert_raise Ash.Error.Unknown, fn ->
+        Ash.read!(query, action: :in_transaction)
+      end
+
+      result = Agent.get(agent, & &1)
+      assert {:error, _} = result
+    end
+
+    test "multiple after_transaction hooks run in order" do
+      Author |> Ash.Changeset.for_create(:create, %{name: "Test"}) |> Ash.create!()
+      agent = start_supervised!({Agent, fn -> [] end})
+
+      query =
+        Author
+        |> Ash.Query.filter(name == "Test")
+        |> Ash.Query.after_transaction(fn _query, result ->
+          Agent.update(agent, &["first" | &1])
+          result
+        end)
+        |> Ash.Query.after_transaction(fn _query, result ->
+          Agent.update(agent, &["second" | &1])
+          result
+        end)
+
+      Ash.read!(query, action: :in_transaction)
+
+      assert Agent.get(agent, & &1) == ["second", "first"]
+    end
+
+    test "hooks run in correct order: around(start) -> before -> action -> after -> around(end)" do
+      Author |> Ash.Changeset.for_create(:create, %{name: "Test"}) |> Ash.create!()
+      agent = start_supervised!({Agent, fn -> [] end})
+
+      query =
+        Author
+        |> Ash.Query.filter(name == "Test")
+        |> Ash.Query.around_transaction(fn query, callback ->
+          Agent.update(agent, &["around_start" | &1])
+          result = callback.(query)
+          Agent.update(agent, &["around_end" | &1])
+          result
+        end)
+        |> Ash.Query.before_transaction(fn query ->
+          Agent.update(agent, &["before" | &1])
+          query
+        end)
+        |> Ash.Query.after_transaction(fn _query, result ->
+          Agent.update(agent, &["after" | &1])
+          result
+        end)
+
+      Ash.read!(query, action: :in_transaction)
+
+      assert Agent.get(agent, & &1) == ["around_end", "after", "before", "around_start"]
+    end
+
+    test "error in before_transaction still runs after_transaction and around_transaction end" do
+      agent = start_supervised!({Agent, fn -> [] end})
+
+      query =
+        Author
+        |> Ash.Query.around_transaction(fn query, callback ->
+          Agent.update(agent, &["around_start" | &1])
+          result = callback.(query)
+          Agent.update(agent, &["around_end" | &1])
+          result
+        end)
+        |> Ash.Query.before_transaction(fn _query ->
+          Agent.update(agent, &["before_error" | &1])
+          {:error, "Before transaction error"}
+        end)
+        |> Ash.Query.after_transaction(fn _query, result ->
+          Agent.update(agent, &["after" | &1])
+          result
+        end)
+
+      assert_raise Ash.Error.Unknown, fn ->
+        Ash.read!(query, action: :in_transaction)
+      end
+
+      assert Agent.get(agent, & &1) == ["around_end", "after", "before_error", "around_start"]
+    end
+
+    test "before_transaction hook must return valid value" do
+      query =
+        Author
+        |> Ash.Query.before_transaction(fn _query ->
+          "invalid return value"
+        end)
+
+      assert_raise Ash.Error.Unknown, ~r/Invalid return value from before_transaction hook/, fn ->
+        Ash.read!(query, action: :in_transaction)
+      end
     end
   end
 end

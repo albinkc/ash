@@ -61,6 +61,7 @@ defmodule Ash.Type.Struct do
       """
     ]
   ]
+
   @moduledoc """
   Represents a struct.
 
@@ -68,6 +69,30 @@ defmodule Ash.Type.Struct do
 
   This cannot be loaded from a database unless the `instance_of` constraint is provided.
   If not, it can only be used to cast input, i.e for arguments.
+
+  ## Alternative: Ash.TypedStruct
+
+  For simpler use cases where you want to define a struct with typed fields inline,
+  consider using `Ash.TypedStruct`. It provides a DSL for defining structs with:
+
+  - Field type specifications and constraints
+  - Default values
+  - Required fields (via `allow_nil?: false`)
+  - Automatic `new/1` and `new!/1` functions
+
+  Example:
+
+      defmodule MyStruct do
+        use Ash.TypedStruct
+        typed_struct do
+          field :name, :string, allow_nil?: false
+          field :age, :integer, constraints: [min: 0]
+          field :email, :string, default: nil
+        end
+      end
+
+  `Ash.TypedStruct` automatically creates an `Ash.Type.Struct` with the appropriate
+  constraints under the hood.
 
   ## Constraints
 
@@ -337,7 +362,7 @@ defmodule Ash.Type.Struct do
                        {:ok, casted} <-
                          Ash.Type.apply_constraints(attribute.type, casted, attribute.constraints) do
                     if is_nil(casted) and attribute.allow_nil? == false do
-                      {:halt, {:error, "is invalid"}}
+                      {:halt, {:error, field: attribute.name, message: "is required"}}
                     else
                       {:cont, {:ok, Map.put(record, attribute.name, casted)}}
                     end
@@ -351,7 +376,7 @@ defmodule Ash.Type.Struct do
 
                 :error ->
                   if attribute.allow_nil? == false do
-                    {:halt, {:error, "is invalid"}}
+                    {:halt, {:error, field: attribute.name, message: "is required"}}
                   else
                     {:cont, {:ok, record}}
                   end
@@ -372,23 +397,32 @@ defmodule Ash.Type.Struct do
   end
 
   defp check_fields(value, fields) do
-    Enum.reduce(fields, {:ok, %{}}, fn
-      {field, field_constraints}, {:ok, checked_value} ->
+    {errors, result} =
+      Enum.reduce(fields, {[], %{}}, fn {field, field_constraints}, {errors_acc, result_acc} ->
         case fetch_field(value, field) do
           {:ok, field_value} ->
-            check_field(checked_value, field, field_value, field_constraints)
+            case check_field(result_acc, field, field_value, field_constraints) do
+              {:ok, updated_result} ->
+                {errors_acc, updated_result}
+
+              {:error, field_errors} ->
+                {errors_acc ++ field_errors, result_acc}
+            end
 
           :error ->
             if field_constraints[:allow_nil?] == false do
-              {:error, [[message: "field must be present", field: field]]}
+              field_error = [message: "field must be present", field: field]
+              {errors_acc ++ [field_error], result_acc}
             else
-              {:ok, checked_value}
+              {errors_acc, result_acc}
             end
         end
+      end)
 
-      {_, _}, {:error, errors} ->
-        {:error, errors}
-    end)
+    case errors do
+      [] -> {:ok, result}
+      _ -> {:error, errors}
+    end
   end
 
   defp check_field(result, field, field_value, field_constraints) do
@@ -414,7 +448,15 @@ defmodule Ash.Type.Struct do
             {:ok, Map.put(result, field, field_value)}
 
           {:error, errors} ->
-            {:error, Enum.map(errors, fn error -> Keyword.put(error, :field, field) end)}
+            formatted_errors =
+              errors
+              |> List.wrap()
+              |> Enum.map(
+                &Ash.Type.CompositeTypeHelpers.format_comprehensive_error_as_keyword(&1, field)
+              )
+              |> Ash.Type.CompositeTypeHelpers.filter_non_informative_errors()
+
+            {:error, formatted_errors}
         end
 
       {:error, error} when is_binary(error) ->

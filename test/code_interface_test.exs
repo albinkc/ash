@@ -66,6 +66,7 @@ defmodule Ash.Test.CodeInterfaceTest do
       define :update_by_id, action: :update_by_id_without_filter, get?: true, args: [:id]
       define :destroy_by_id, action: :destroy_by_id_without_filter, get?: true, args: [:id]
       define :create, args: [{:optional, :first_name}]
+      define :insert, action: :create
       define :hello, args: [:name]
 
       define :update_by_id_map do
@@ -97,6 +98,17 @@ defmodule Ash.Test.CodeInterfaceTest do
         default_options: [actor: %{name: "William Shatner"}],
         action: :hello_actor
 
+      define :hello_actor_with_function_default,
+        default_options: fn ->
+          [actor: %{name: "Dynamic Actor at #{DateTime.utc_now() |> DateTime.to_iso8601()}"}]
+        end,
+        action: :hello_actor
+
+      define :get_user_with_invalid_load,
+        default_options: [load: [[invalid: :load]]],
+        action: :read,
+        get_by: :id
+
       define :hello_actor
       define :create_with_map, args: [:map]
       define :update_with_map, args: [:map]
@@ -104,6 +116,11 @@ defmodule Ash.Test.CodeInterfaceTest do
       define :bulk_create, action: :create
       define :update, action: :update
       define :destroy, action: :destroy
+      define :create_with_private, action: :create_with_private
+      define :update_with_private, action: :update_with_private
+      define :atomic_update_with_private, action: :atomic_update_with_private
+      define :destroy_with_private, action: :destroy_with_private
+      define :soft_destroy_with_private, action: :soft_destroy_with_private
 
       define_calculation(:full_name, args: [:first_name, :last_name])
 
@@ -176,6 +193,62 @@ defmodule Ash.Test.CodeInterfaceTest do
           {:ok, "Hello, #{context.actor.name}."}
         end)
       end
+
+      create :create_with_private do
+        argument :private_tag, :string, allow_nil?: false, public?: false
+        accept [:first_name, :last_name]
+
+        change fn changeset, _ ->
+          Ash.Changeset.change_attribute(
+            changeset,
+            :last_name,
+            "#{changeset.arguments.private_tag}_tagged"
+          )
+        end
+      end
+
+      update :update_with_private do
+        require_atomic? false
+        argument :private_flag, :string, allow_nil?: false, public?: false
+        accept [:first_name, :last_name]
+
+        change fn changeset, _ ->
+          Ash.Changeset.change_attribute(
+            changeset,
+            :last_name,
+            "#{changeset.arguments.private_flag}_flagged"
+          )
+        end
+      end
+
+      update :atomic_update_with_private do
+        require_atomic? false
+        argument :private_flag, :string, allow_nil?: false, public?: false
+        accept [:first_name, :last_name]
+
+        change atomic_update(:last_name, expr(^arg(:private_flag) <> "_flagged"))
+      end
+
+      destroy :destroy_with_private do
+        argument :private_reason, :string, allow_nil?: false, public?: false
+        accept []
+      end
+
+      destroy :soft_destroy_with_private do
+        require_atomic? false
+        soft? true
+        argument :private_reason, :string, allow_nil?: false, public?: false
+        accept []
+
+        change fn changeset, _ ->
+          changeset
+          |> Ash.Changeset.change_attribute(:deleted_at, DateTime.utc_now())
+          |> Ash.Changeset.change_attribute(
+            :last_name,
+            "soft_destroyed_by_#{changeset.arguments.private_reason}"
+          )
+        end
+      end
     end
 
     calculations do
@@ -208,6 +281,10 @@ defmodule Ash.Test.CodeInterfaceTest do
       end
 
       attribute :last_name, :string do
+        public?(true)
+      end
+
+      attribute :deleted_at, :utc_datetime do
         public?(true)
       end
     end
@@ -313,6 +390,17 @@ defmodule Ash.Test.CodeInterfaceTest do
     test "have a helper methods to produce queries" do
       assert %Ash.Query{action: %{name: :read}} = User.query_to_read_users()
       assert %Ash.Query{action: %{name: :by_id}} = User.query_to_get_by_id("some uuid")
+    end
+
+    test "results can be sorted" do
+      User.create!("bob")
+      User.create!("cob")
+
+      assert [%{first_name: "bob"}, %{first_name: "cob"}] =
+               User.read_users!(query: [sort: [first_name: :asc]], authorize?: false)
+
+      assert [%{first_name: "cob"}, %{first_name: "bob"}] =
+               User.read_users!(query: [sort: [first_name: :desc]], authorize?: false)
     end
 
     test "have a helper to test authorization" do
@@ -609,6 +697,42 @@ defmodule Ash.Test.CodeInterfaceTest do
     assert "Hello, William Shatner." = User.hello_actor_with_default!()
   end
 
+  test "default options with function" do
+    assert "Hello, Override Actor." =
+             User.hello_actor_with_function_default!(actor: %{name: "Override Actor"})
+
+    result = User.hello_actor_with_function_default!()
+    assert result =~ "Hello, Dynamic Actor at "
+    # ISO8601 timestamp format contains 'T'
+    assert result =~ "T"
+    # UTC timestamps end with 'Z'
+    assert result =~ "Z"
+  end
+
+  test "default options with invalid load returns error" do
+    user = User.create!("john")
+
+    assert {:error, %Ash.Error.Invalid{errors: [error]}} =
+             User.get_user_with_invalid_load(user.id)
+
+    assert %Ash.Error.Query.InvalidLoad{load: {:invalid, :load}} = error
+  end
+
+  test "default options with function are called each time" do
+    result1 = User.hello_actor_with_function_default!()
+    result2 = User.hello_actor_with_function_default!()
+
+    assert result1 =~ "Hello, Dynamic Actor at "
+    assert result2 =~ "Hello, Dynamic Actor at "
+
+    # They should have different timestamps, proving the function was called each time
+    refute result1 == result2
+
+    # Test that function-based defaults can still be overridden
+    assert "Hello, Override Actor." =
+             User.hello_actor_with_function_default!(actor: %{name: "Override Actor"})
+  end
+
   defmodule Scope do
     defstruct [:actor, :tenant, :context]
 
@@ -621,11 +745,267 @@ defmodule Ash.Test.CodeInterfaceTest do
     end
   end
 
+  defmodule ContextScope do
+    defstruct [:current_user, :org_id, :product_id]
+
+    defimpl Ash.Scope.ToOpts do
+      def get_actor(%{current_user: current_user}), do: {:ok, current_user}
+      def get_tenant(_), do: {:ok, nil}
+
+      def get_context(%{org_id: org_id, product_id: product_id}),
+        do: {:ok, %{shared: %{org_id: org_id, product_id: product_id}}}
+
+      def get_tracer(_), do: :error
+
+      def get_authorize?(_), do: :error
+    end
+  end
+
+  defmodule LogEvent do
+    @moduledoc false
+    use Ash.Resource,
+      data_layer: Ash.DataLayer.Ets,
+      domain: Ash.Test.Domain
+
+    ets do
+      private?(true)
+    end
+
+    code_interface do
+      define :create, args: [:event]
+    end
+
+    attributes do
+      uuid_primary_key :id
+      attribute(:user_id, :uuid, public?: true)
+      attribute(:org_id, :uuid, public?: true)
+      attribute(:product_id, :integer, public?: true)
+      attribute(:event, :string, public?: true)
+    end
+
+    actions do
+      defaults [:read]
+
+      create :create do
+        accept [:event]
+
+        change set_attribute(:user_id, actor(:id))
+        change set_attribute(:org_id, context(:org_id))
+        change set_attribute(:product_id, context(:product_id))
+      end
+    end
+  end
+
+  defmodule ContextUser do
+    @moduledoc false
+    use Ash.Resource,
+      data_layer: Ash.DataLayer.Ets,
+      domain: Ash.Test.Domain
+
+    ets do
+      private?(true)
+    end
+
+    code_interface do
+      define :enable_product, args: [:product_id]
+    end
+
+    actions do
+      create :create do
+        primary? true
+        accept [:last_used_product_id]
+      end
+
+      update :enable_product do
+        require_atomic? false
+
+        argument :product_id, :integer
+
+        change set_attribute(:last_used_product_id, arg(:product_id))
+
+        change after_action(fn changeset, user, context ->
+                 LogEvent.create!(
+                   "product enabled",
+                   scope: context,
+                   context: %{
+                     shared: %{product_id: Ash.Changeset.get_argument(changeset, :product_id)}
+                   }
+                 )
+
+                 {:ok, user}
+               end)
+      end
+    end
+
+    attributes do
+      uuid_primary_key :id
+      attribute(:last_used_product_id, :integer, public?: true)
+    end
+  end
+
   test "uses scope options" do
     scope = %Scope{actor: %{name: "Jelly Belly"}}
     assert "Hello, Jelly Belly." = User.hello_actor!(scope: scope)
     assert "Hello, Jimmy Bimmy." = User.hello_actor!(scope: scope, actor: %{name: "Jimmy Bimmy"})
 
     assert "Hello, William Shatner." = User.hello_actor_with_default!()
+  end
+
+  test "private arguments can be passed through code interface for create" do
+    user =
+      User.create_with_private!(%{first_name: "john"},
+        private_arguments: %{private_tag: "test"}
+      )
+
+    assert user.last_name == "test_tagged"
+  end
+
+  test "private arguments can be passed through code interface for bulk_create" do
+    %Ash.BulkResult{records: users} =
+      User.create_with_private!([%{first_name: "john"}, %{first_name: "jane"}],
+        private_arguments: %{private_tag: "bulk_test"},
+        bulk_options: [return_records?: true]
+      )
+
+    assert length(users) == 2
+
+    assert Enum.all?(users, fn user ->
+             user.last_name == "bulk_test_tagged"
+           end)
+  end
+
+  test "private arguments can be passed through code interface for update" do
+    user = User.create!("john")
+
+    updated =
+      User.update_with_private!(user, %{}, private_arguments: %{private_flag: "updated"})
+
+    assert updated.last_name == "updated_flagged"
+  end
+
+  test "private arguments can be passed through code interface for bulk_update" do
+    %Ash.BulkResult{records: users} =
+      User.insert!([%{first_name: "john"}, %{first_name: "jane"}],
+        bulk_options: [return_records?: true]
+      )
+
+    %Ash.BulkResult{records: updated_users} =
+      User.update_with_private!(users, %{},
+        private_arguments: %{private_flag: "bulk_updated"},
+        bulk_options: [return_records?: true]
+      )
+
+    assert length(updated_users) == 2
+
+    assert Enum.all?(updated_users, fn user ->
+             user.last_name == "bulk_updated_flagged"
+           end)
+  end
+
+  test "private arguments can be passed through code interface for atomic update" do
+    user = User.create!("john")
+
+    updated =
+      User.atomic_update_with_private!(user, %{}, private_arguments: %{private_flag: "updated"})
+
+    assert updated.last_name == "updated_flagged"
+  end
+
+  test "private arguments can be passed through code interface for atomic bulk_update" do
+    %Ash.BulkResult{records: users} =
+      User.insert!([%{first_name: "john"}, %{first_name: "jane"}],
+        bulk_options: [return_records?: true]
+      )
+
+    %Ash.BulkResult{records: updated_users} =
+      User.atomic_update_with_private!(users, %{},
+        private_arguments: %{private_flag: "bulk_updated"},
+        bulk_options: [return_records?: true]
+      )
+
+    assert length(updated_users) == 2
+
+    assert Enum.all?(updated_users, fn user ->
+             user.last_name == "bulk_updated_flagged"
+           end)
+  end
+
+  test "private arguments can be passed through code interface for destroy" do
+    user = User.create!("john")
+
+    :ok = User.destroy_with_private!(user, private_arguments: %{private_reason: "admin"})
+
+    assert {:error, %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{}]}} =
+             User.get_user(user.id)
+  end
+
+  test "private arguments can be passed through code interface for bulk destroy" do
+    %Ash.BulkResult{records: users} =
+      User.insert!([%{first_name: "john"}, %{first_name: "jane"}],
+        bulk_options: [return_records?: true]
+      )
+
+    %Ash.BulkResult{status: :success} =
+      User.destroy_with_private!(users, %{},
+        private_arguments: %{private_reason: "cleanup"},
+        bulk_options: [return_records?: false]
+      )
+
+    Enum.each(users, fn user ->
+      assert {:error, %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{}]}} =
+               User.get_user(user.id)
+    end)
+  end
+
+  test "private arguments can be passed through code interface for soft destroy" do
+    user = User.create!("john")
+
+    :ok = User.soft_destroy_with_private!(user, private_arguments: %{private_reason: "admin"})
+
+    updated_user = User.get_user!(user.id)
+
+    assert updated_user.last_name == "soft_destroyed_by_admin"
+    assert updated_user.deleted_at != nil
+  end
+
+  test "private arguments can be passed through code interface for bulk soft destroy" do
+    %Ash.BulkResult{records: users} =
+      User.insert!([%{first_name: "john"}, %{first_name: "jane"}],
+        bulk_options: [return_records?: true]
+      )
+
+    %Ash.BulkResult{status: :success} =
+      User.soft_destroy_with_private!(users, %{},
+        private_arguments: %{private_reason: "cleanup"},
+        bulk_options: [return_records?: false]
+      )
+
+    update_users = User.read_users!()
+
+    Enum.each(update_users, fn updated_user ->
+      assert updated_user.last_name == "soft_destroyed_by_cleanup"
+      assert updated_user.deleted_at != nil
+    end)
+  end
+
+  test "scope and context are merged correctly" do
+    org_id = "8eaafd6e-ed0f-44cc-9429-c30c77d606dd"
+
+    user = Ash.create!(ContextUser, %{last_used_product_id: 0})
+    assert user.last_used_product_id == 0
+
+    scope = %ContextScope{current_user: user, org_id: org_id, product_id: nil}
+
+    user = ContextUser.enable_product!(user, 123, scope: scope)
+    assert user.last_used_product_id == 123
+    log_event = Ash.read_one!(LogEvent)
+    user_id = user.id
+
+    assert %Ash.Test.CodeInterfaceTest.LogEvent{
+             user_id: ^user_id,
+             org_id: ^org_id,
+             product_id: 123,
+             event: "product enabled"
+           } = log_event
   end
 end

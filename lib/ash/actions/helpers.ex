@@ -17,7 +17,13 @@ defmodule Ash.Actions.Helpers do
       Enum.reduce(batch, {[], []}, fn changeset, {batch, must_be_simple} ->
         if changeset.around_transaction in [[], nil] and changeset.after_transaction in [[], nil] and
              changeset.around_action in [[], nil] do
-          changeset = Ash.Changeset.run_before_transaction_hooks(changeset)
+          changeset =
+            if changeset.valid? do
+              Ash.Changeset.run_before_transaction_hooks(changeset)
+            else
+              changeset
+            end
+
           {[changeset | batch], must_be_simple}
         else
           {batch, [%{changeset | __validated_for_action__: action.name} | must_be_simple]}
@@ -187,15 +193,6 @@ defmodule Ash.Actions.Helpers do
 
   def validate_calculation_load!(other, _), do: List.wrap(other)
 
-  defp set_context(%Ash.Changeset{} = changeset, context),
-    do: Ash.Changeset.set_context(changeset, context)
-
-  defp set_context(%Ash.Query{} = query, context),
-    do: Ash.Query.set_context(query, context)
-
-  defp set_context(%Ash.ActionInput{} = action_input, context),
-    do: Ash.ActionInput.set_context(action_input, context)
-
   defp set_skip_unknown_opts(opts, %{action: %{skip_unknown_inputs: skip_unknown_inputs}}) do
     Keyword.update(
       opts,
@@ -226,7 +223,11 @@ defmodule Ash.Actions.Helpers do
       |> set_when_ok(:actor, actor, fn l, _r -> l end)
       |> set_when_ok(:tenant, tenant, fn l, _r -> l end)
       |> set_when_ok(:authorize?, authorize?, fn l, _r -> l end)
-      |> set_when_ok(:context, context, &Ash.Helpers.deep_merge_maps(&1, &2))
+      |> set_when_ok(
+        :context,
+        context,
+        &Ash.Helpers.deep_merge_maps(&2, &1)
+      )
       |> Keyword.delete(:scope)
     else
       opts
@@ -237,7 +238,7 @@ defmodule Ash.Actions.Helpers do
     opts = apply_scope_to_opts(opts)
 
     opts = set_skip_unknown_opts(opts, query_or_changeset)
-    query_or_changeset = set_context(query_or_changeset, opts[:context] || %{})
+    query_or_changeset = Ash.Subject.set_context(query_or_changeset, opts[:context] || %{})
 
     domain =
       Ash.Resource.Info.domain(query_or_changeset.resource) || opts[:domain] || domain ||
