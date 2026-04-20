@@ -20,24 +20,24 @@ These recommendations all correspond to standard practice in most Elixir/Phoenix
 
 ```
 lib/
-├── my_app/                    # Your application's main namespace
-│   ├── accounts.ex            # Accounts domain module
-│   ├── helpdesk.ex            # Helpdesk domain module
-│   │
-│   ├── accounts/               # Accounts context
-│   │   ├── user.ex             # User resource
-│   │   ├── user/               # User resource files
-│   │   ├── token.ex            # Token resource
-│   │   └── password_helper.ex  # Support module
-│   │
-│   └── helpdesk/            # Helpdesk context
-│       ├── ticket.ex        # Ticket resource
-│       ├── notification.ex  # Notification resource
-│       ├── other_file.ex    # Support module
-│       └── ticket/          # Ticket resource files
-│           ├── preparations/
-│           ├── changes/
-│           └── checks/
+|-- my_app/                    # Your application's main namespace
+|   |-- accounts.ex            # Accounts domain module
+|   |-- helpdesk.ex            # Helpdesk domain module
+|   |
+|   |-- accounts/              # Accounts context
+|   |   |-- user.ex            # User resource
+|   |   |-- user/              # User resource files
+|   |   |-- token.ex           # Token resource
+|   |   `-- password_helper.ex # Support module
+|   |
+|   `-- helpdesk/              # Helpdesk context
+|       |-- ticket.ex          # Ticket resource
+|       |-- notification.ex    # Notification resource
+|       |-- other_file.ex      # Support module
+|       `-- ticket/            # Ticket resource files
+|           |-- preparations/
+|           |-- changes/
+|           `-- checks/
 ```
 
 Place your Ash application in the standard Elixir application directory `lib/my_app`. Your `Ash.Domain` modules should be at the root level of this directory. Each domain should have a directory named after it, containing the domain's `Ash.Resource` modules and any of the domain's supporting modules. All resource interaction ultimately goes through a domain module.
